@@ -1,0 +1,67 @@
+// Shared types for receipts
+
+export type Receipt = {
+  userId: string;
+  receiptId: string;
+  parentReceiptId?: string | null;
+  customerId?: string;
+  createdAt: string;
+  updatedAt?: string;
+  isDownloaded: boolean;
+  transactionSource?: string;
+  transactionAmount?: number;
+  transactionCurrency?: string;
+  transactionOperationNumber?: string;
+  transactionDateTimeUtc?: string;
+  blobUrl?: string;
+  ocrText?: string;
+  userName?: string;
+  payeeName?: string;  
+};
+
+export type ReceiptSummary = {
+  customerId: string;
+  lastUpdatedAt: string | null;
+};
+
+export type ReceiptPage = {
+  customerId: string;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  lastUpdatedAt: string | null;
+  receipts: Receipt[];
+  totalCount: number;
+};
+
+export type ReceiptsList = {
+  receipts: Receipt[];
+};
+
+export type Customer = {
+  customerId: string;
+  customerName?: string;
+  maxUsersAllowed?: number;
+  maxImagesPerMonth?: number;
+};
+
+export type CustomerList = {
+  customers: Customer[];
+};
+
+export type SummaryBySource = {
+  transactionSource: string;
+  totalAmount: number;
+};
+
+export type TotalByUser = {
+  transactionSource: string;
+  userId: string;
+  totalAmount: number;
+  fullName: string;
+};
+
+export type ReceiptsSummaryByDate = {
+  summaryBySource: SummaryBySource[];
+  totalsByUser: TotalByUser[];
+};

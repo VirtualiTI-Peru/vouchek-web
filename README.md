@@ -1,0 +1,95 @@
+# Vouchek Web
+
+## Purpose
+
+This project is the web administration portal for Vouchek.
+
+It is intended for organization administrators and verification/accounting users to:
+
+- sign in with Supabase
+- review processed receipts
+- manage customers and organization members
+- trigger organization synchronization with backend data
+
+The web app depends on the backend WebApi for business operations and on Supabase for authentication.
+
+## Stack
+
+- Next.js
+- React
+- Supabase JS
+- Tailwind CSS
+
+## Environment Variables
+
+Create a local `.env.local` file in this folder.
+
+**Production / UAT:** configure secrets in Azure App Service **Configuration** (`vouchek-uat-web`). This app does **not** use Azure Key Vault in code.
+
+Full matrix (web, API, Functions, mobile): [`../../docs/SECRETS_AND_CONFIGURATION.md`](../../docs/SECRETS_AND_CONFIGURATION.md)
+
+Required:
+
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role (server-only)
+- `API_BASE_URL`: base URL of the Vouchek WebApi, for example `https://localhost:7231`
+- `NEXT_PUBLIC_SUPERADMIN_EMAILS`: semicolon-separated superadmin email list
+
+Optional:
+
+- `INVITE_BASE_URL`: public base URL for invitation and password-recovery links (UAT: your `vouchek-uat-web` URL)
+- `RESEND_API_KEY`: required for invite / welcome / forgot-password emails
+- `RESEND_SENDER_EMAIL`: sender address used for transactional emails
+- `RECEIPTS_CACHE_TTL_SECONDS`: server-side receipts page cache TTL in seconds, default `30`
+- `RECEIPTS_SUMMARY_CACHE_TTL_SECONDS`: receipts summary polling cache TTL in seconds, default `5`
+
+## Local Development Setup
+
+Prerequisites:
+
+- Node.js 20 LTS or newer
+- npm
+- running Vouchek backend WebApi
+- a Supabase project with the required JWT claims
+
+Steps:
+
+1. Create `.env.local` with the variables listed above.
+2. Install dependencies.
+3. Start the development server.
+
+```bash
+npm install
+npm run dev
+```
+
+The app will usually run on `http://localhost:3000`.
+
+## Authentication Assumptions
+
+This app expects Supabase-issued JWTs to include custom claims used by the backend and portal logic:
+
+- `OrgId`
+- `Role`
+- `Email`
+
+Expected roles currently used by the backend include:
+
+- `org:transportista`
+- `org:verificador`
+- `org:sistema`
+
+## Local Verification Checklist
+
+- Sign in through Supabase successfully.
+- Load customers from the backend.
+- Load receipts from the backend.
+- Verify role-based access behavior.
+- Confirm `API_BASE_URL` points to the same backend instance used by mobile and desktop during testing.
+
+## Related Services
+
+- Backend API: `../../vouchek-backend/src/WebApi`
+- Functions: `../../vouchek-backend/src/Functions`
+- Secrets & config (App Settings first): `../../docs/SECRETS_AND_CONFIGURATION.md`
