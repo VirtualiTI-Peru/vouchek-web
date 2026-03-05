@@ -2,16 +2,23 @@
 import { useEffect, useState } from "react";
 
 // InviteButton component
-type InviteButtonProps = { orgId: string };
+type InviteButtonProps = { orgId: string; members: any[] };
 function InviteButton(props: InviteButtonProps) {
-	const { orgId } = props;
+	const { orgId, members } = props;
 	const [email, setEmail] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [message, setMessage] = useState("");
 
 	const handleInvite = async () => {
-		setLoading(true);
 		setMessage("");
+		if (!email) return;
+		// Check if email already exists in members
+		const exists = members.some(m => m.email?.toLowerCase() === email.toLowerCase());
+		if (exists) {
+			setMessage("El usuario ya existe en la organización.");
+			return;
+		}
+		setLoading(true);
 		try {
 			const res = await fetch("/api/invite", {
 				method: "POST",
@@ -133,7 +140,7 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 				</tbody>
 			</table>
 			<div className="mt-4">
-				<InviteButton orgId={selectedOrg} />
+				 <InviteButton orgId={selectedOrg} members={members} />
 			</div>
 		</div>
 	);

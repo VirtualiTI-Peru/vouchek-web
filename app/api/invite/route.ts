@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clerkClient } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/clerk-sdk-node";
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,9 +7,14 @@ export async function POST(req: NextRequest) {
     if (!email || !orgId) {
       return NextResponse.json({ error: "Missing email or orgId" }, { status: 400 });
     }
+    // Check if user already exists in the organization
+    const memberships = await clerkClient.organizations.getOrganizationMembershipList({ organizationId: orgId });
+    const exists = memberships.some((m: any) => m.publicUserData?.identifier?.toLowerCase() === email.toLowerCase() || m.publicUserData?.emailAddress?.toLowerCase() === email.toLowerCase());
+    if (exists) {
+      return NextResponse.json({ error: "El usuario ya existe en la organización." }, { status: 409 });
+    }
     // Send invitation using Clerk API
-    const client = await clerkClient();
-    const invitation = await client.invitations.createInvitation({
+    const invitation = await clerkClient.invitations.createInvitation({
       emailAddress: email
     });
     return NextResponse.json({ invitation });
