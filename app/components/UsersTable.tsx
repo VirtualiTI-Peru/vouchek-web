@@ -118,10 +118,10 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 						<tr><td colSpan={5} className="text-center py-2">No members found.</td></tr>
 					) : members.map(member => (
 						<tr key={member.id} className="border-t">
-							<td className="px-2 py-1 border">{member.name}</td>
+							<td className="px-2 py-1 border">{member.username}</td>
 							<td className="px-2 py-1 border">{member.email}</td>
 							<td className="px-2 py-1 border">{member.status ?? <span className='text-slate-400'>Unknown</span>}</td>
-							<td className="px-2 py-1 border">{member.lastLogin ? new Date(member.lastLogin).toLocaleString() : <span className='text-slate-400'>Never</span>}</td>
+							<td className="px-2 py-1 border">{member.lastSignInAt ? new Date(member.lastSignInAt).toLocaleString() : <span className='text-slate-400'>Never</span>}</td>
 							<td className="px-2 py-1 border space-x-2">
 								<button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleResetPassword(member)}>Reset Password</button>
 								<button className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleDeleteUser(member)}>Delete</button>

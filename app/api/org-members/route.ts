@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
       memberships.map(async (m: any) => {
         const user = await clerkClient.users.getUser(m.publicUserData.userId);
         return {
+          id: user.id,
           email: user.emailAddresses?.[0]?.emailAddress,
           username:
             user.username ||

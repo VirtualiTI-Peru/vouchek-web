@@ -8,9 +8,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing email or orgId" }, { status: 400 });
     }
     // Send invitation using Clerk API
-    const invitation = await clerkClient.invitations.createInvitation({
-      emailAddress: email,
-      organizationId: orgId,
+    const client = await clerkClient();
+    const invitation = await client.invitations.createInvitation({
+      emailAddress: email
     });
     return NextResponse.json({ invitation });
   } catch (error: any) {
