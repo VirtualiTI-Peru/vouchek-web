@@ -21,25 +21,18 @@ export default async function AdminPage() {
   return (
     <div className="space-y-4">
       <div className="rounded border bg-white p-4">
-        <div className="text-lg font-semibold">Admin</div>
-        <div className="text-sm text-slate-600">User management / invitations will be implemented using Clerk server-side APIs.</div>
+        <div className="text-lg font-semibold">Usuarios</div>
       </div>
 
       <div className="rounded border bg-white p-4 text-sm text-slate-700">
         <div className="mb-4">
-          <label className="block font-medium mb-1">Organization</label>
+          <label className="block font-medium mb-1">Empresa</label>
           {ctx.isSuperAdmin ? (
             <UsersTable organizations={organizations} />
           ) : (
             <div className="border rounded px-2 py-1 bg-gray-100 text-gray-500 cursor-not-allowed">{organizations[0]?.name}</div>
           )}
         </div>
-        <div className="font-medium">Next steps</div>
-        <ul className="list-disc pl-5">
-          <li>List org users (Clerk organization memberships)</li>
-          <li>Invite user by email</li>
-          <li>Enforce MaxUsers (X) when inviting</li>
-        </ul>
       </div>
     </div>
   );

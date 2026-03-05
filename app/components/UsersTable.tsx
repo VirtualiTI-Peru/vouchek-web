@@ -20,13 +20,13 @@ function InviteButton(props: InviteButtonProps) {
 			});
 			const data = await res.json();
 			if (res.ok) {
-				setMessage("Invitation sent!");
+				setMessage("Invitación enviada!");
 				setEmail("");
 			} else {
-				setMessage(data.error || "Failed to send invitation");
+				setMessage(data.error || "Error al enviar la invitación");
 			}
 		} catch (e) {
-			setMessage("Error sending invitation");
+			setMessage("Error al enviar la invitación");
 		} finally {
 			setLoading(false);
 		}
@@ -37,7 +37,7 @@ function InviteButton(props: InviteButtonProps) {
 			<input
 				type="email"
 				className="border rounded px-2 py-1"
-				placeholder="Invite email"
+				placeholder="Correo electrónico"
 				value={email}
 				onChange={e => setEmail(e.target.value)}
 				disabled={loading}
@@ -47,7 +47,7 @@ function InviteButton(props: InviteButtonProps) {
 				onClick={handleInvite}
 				disabled={loading || !email}
 			>
-				{loading ? "Inviting..." : "Invite"}
+				{loading ? "Enviando..." : "Invitar"}
 			</button>
 			{message && <span className="ml-2 text-xs text-slate-600">{message}</span>}
 		</div>
@@ -104,11 +104,12 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 			<table className="min-w-full text-sm border bg-white">
 				<thead className="bg-slate-50 text-left text-slate-600">
 					<tr>
-						<th className="px-2 py-1 border">Name</th>
-						<th className="px-2 py-1 border">Email</th>
+						<th className="px-2 py-1 border">Usuario</th>
+						<th className="px-2 py-1 border">Correo Electronico</th>
+						<th className="px-2 py-1 border">Rol</th>
 						<th className="px-2 py-1 border">Status</th>
-						<th className="px-2 py-1 border">Last Login</th>
-						<th className="px-2 py-1 border">Actions</th>
+						<th className="px-2 py-1 border">Ultimo Acceso</th>
+						<th className="px-2 py-1 border"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -120,11 +121,12 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 						<tr key={member.id} className="border-t">
 							<td className="px-2 py-1 border">{member.username}</td>
 							<td className="px-2 py-1 border">{member.email}</td>
+							<td className="px-2 py-1 border">{member.role}</td>
 							<td className="px-2 py-1 border">{member.status ?? <span className='text-slate-400'>Unknown</span>}</td>
-							<td className="px-2 py-1 border">{member.lastSignInAt ? new Date(member.lastSignInAt).toLocaleString() : <span className='text-slate-400'>Never</span>}</td>
+							<td className="px-2 py-1 border">{member.lastSignInAt ? new Date(member.lastSignInAt).toLocaleString() : <span className='text-slate-400'></span>}</td>
 							<td className="px-2 py-1 border space-x-2">
-								<button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleResetPassword(member)}>Reset Password</button>
-								<button className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleDeleteUser(member)}>Delete</button>
+								<button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleResetPassword(member)}>Restablecer Contraseña</button>
+								<button className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleDeleteUser(member)}>Eliminar</button>
 							</td>
 						</tr>
 					))}

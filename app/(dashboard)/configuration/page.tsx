@@ -38,14 +38,14 @@ export default function SuperAdminPage() {
     <div className="space-y-4">
       <div className="rounded border bg-white p-4">
         <div className="flex items-center mb-2">
-          <div className="font-medium mr-4">Customer List (Clerk Organizations)</div>
+          <div className="font-medium mr-4">Lista de Clientes (Clerk Organizations)</div>
           <form action={handleSync}>
             <button
               className="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-4 rounded"
               type="submit"
               disabled={syncing}
             >
-              {syncing ? 'Syncing...' : 'Sync'}
+              {syncing ? 'Sincronizando...' : 'Sincronizar'}
             </button>
           </form>
         </div>

@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
         return {
           id: user.id,
           email: user.emailAddresses?.[0]?.emailAddress,
+          role: m.role,
           username:
             user.username ||
             [user.firstName || m.publicUserData.firstName, user.lastName || m.publicUserData.lastName].filter(Boolean).join(' '),

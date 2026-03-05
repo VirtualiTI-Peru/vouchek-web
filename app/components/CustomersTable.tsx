@@ -9,10 +9,10 @@ export default function CustomersTable({ customers }: CustomerList) {
 					<thead className="bg-slate-50 text-left text-slate-600">
 						<tr>
 							<th className="px-2 py-1 border">Customer ID</th>
-							<th className="px-2 py-1 border">Name</th>
-							<th className="px-2 py-1 border">Max Users</th>
-							<th className="px-2 py-1 border">Max Images/Month</th>
-							<th className="px-2 py-1 border">Actions</th>
+							<th className="px-2 py-1 border">Nombre</th>
+							<th className="px-2 py-1 border">Usuarios Máximos</th>
+							<th className="px-2 py-1 border">Imágenes Máximas/Mes</th>
+							<th className="px-2 py-1 border"></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -23,7 +23,7 @@ export default function CustomersTable({ customers }: CustomerList) {
 								<td className="px-2 py-1 border">{customer.maxUsersAllowed ?? <span className='text-slate-400'>Not set</span>}</td>
 								<td className="px-2 py-1 border">{customer.maxImagesPerMonth ?? <span className='text-slate-400'>Not set</span>}</td>
 								<td className="px-2 py-1 border">
-									<button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded">Edit</button>
+									<button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded">Editar</button>
 								</td>
 							</tr>
 						))}
