@@ -1,4 +1,4 @@
-# WalletOCR Admin
+# voucheck Admin
 
 Next.js + Tailwind CSS admin portal.
 
@@ -14,7 +14,7 @@ Superadmin is configured by env var `SUPERADMIN_EMAILS` (semicolon-separated).
 
 ## Environment
 
-Create `src/WalletOCR.Admin/.env.local`:
+Create `src/voucheck.Admin/.env.local`:
 
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...`
 - `CLERK_SECRET_KEY=...`
@@ -25,7 +25,7 @@ Create `src/WalletOCR.Admin/.env.local`:
 ## Run
 
 ```bash
-cd src/WalletOCR.Admin
+cd src/voucheck.Admin
 npm i
 npm run dev
 ```

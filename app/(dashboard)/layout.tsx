@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <div className="font-semibold">WalletOCR Admin</div>
+          <div className="font-semibold">voucheck Admin</div>
         </div>
       </header>
 
