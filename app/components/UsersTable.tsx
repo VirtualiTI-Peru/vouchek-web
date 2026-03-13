@@ -1,13 +1,24 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 
 // InviteButton component
 type InviteButtonProps = { orgId: string; members: any[] };
 function InviteButton(props: InviteButtonProps) {
 	const { orgId, members } = props;
 	const [email, setEmail] = useState("");
+	const [role, setRole] = useState("org:transportista");
 	const [loading, setLoading] = useState(false);
 	const [message, setMessage] = useState("");
+
+	const { user } = useUser();
+
+	// Define available roles (customize as needed)
+	const availableRoles = [
+		{ value: "org:transportista", label: "Transportista" },
+		{ value: "org:sistema", label: "Administrador del Sistema" },
+		{ value: "org:verificador", label: "Verificador" },
+	];
 
 	const handleInvite = async () => {
 		setMessage("");
@@ -20,10 +31,11 @@ function InviteButton(props: InviteButtonProps) {
 		}
 		setLoading(true);
 		try {
+			const invitedBy = user?.id || "Administrador";
 			const res = await fetch("/api/invite", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email, orgId }),
+				body: JSON.stringify({ email, orgId, invitedBy, role }),
 			});
 			const data = await res.json();
 			if (res.ok) {
@@ -49,6 +61,16 @@ function InviteButton(props: InviteButtonProps) {
 				onChange={e => setEmail(e.target.value)}
 				disabled={loading}
 			/>
+			<select
+				className="border rounded px-2 py-1"
+				value={role}
+				onChange={e => setRole(e.target.value)}
+				disabled={loading}
+			>
+				{availableRoles.map(r => (
+					<option key={r.value} value={r.value}>{r.label}</option>
+				))}
+			</select>
 			<button
 				className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
 				onClick={handleInvite}
@@ -141,7 +163,89 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 			</table>
 			<div className="mt-4">
 				 <InviteButton orgId={selectedOrg} members={members} />
+                {/* Create User Form */}
+                <div className="mt-6 border rounded p-4 bg-slate-50">
+                  <div className="font-semibold mb-2">Crear nuevo usuario</div>
+                  <CreateUserForm orgId={selectedOrg} onUserCreated={() => setMembers([])} />
+                </div>
 			</div>
 		</div>
 	);
+}
+
+// CreateUserForm component
+function CreateUserForm({ orgId, onUserCreated }: { orgId: string; onUserCreated: () => void }) {
+  const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage("");
+    if (!email || !firstName || !lastName) {
+      setMessage("Todos los campos son obligatorios.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/create-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, firstName, lastName, orgId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage("Usuario creado exitosamente.");
+        setEmail("");
+        setFirstName("");
+        setLastName("");
+        onUserCreated();
+      } else {
+        setMessage(data.error || "Error al crear el usuario.");
+      }
+    } catch (e) {
+      setMessage("Error al crear el usuario.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form className="flex flex-col space-y-2" onSubmit={handleCreate}>
+      <input
+        type="email"
+        className="border rounded px-2 py-1"
+        placeholder="Correo electrónico"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        disabled={loading}
+      />
+      <input
+        type="text"
+        className="border rounded px-2 py-1"
+        placeholder="Nombre"
+        value={firstName}
+        onChange={e => setFirstName(e.target.value)}
+        disabled={loading}
+      />
+      <input
+        type="text"
+        className="border rounded px-2 py-1"
+        placeholder="Apellido"
+        value={lastName}
+        onChange={e => setLastName(e.target.value)}
+        disabled={loading}
+      />
+      <button
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded"
+        type="submit"
+        disabled={loading}
+      >
+        {loading ? "Creando..." : "Crear Usuario"}
+      </button>
+      {message && <span className="text-xs text-slate-600 mt-2">{message}</span>}
+    </form>
+  );
 }
