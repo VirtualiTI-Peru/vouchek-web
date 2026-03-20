@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 
-export type PortalRole = 'org:accountant' | 'org:admin' | string;
+export type PortalRole = 'org:verificador' | 'org:admin' | string;
 
 export type PortalContext = {
   userId: string;
@@ -39,7 +39,7 @@ export async function getPortalContext(): Promise<PortalContext> {
   const role = claims?.Role as PortalRole | undefined;
   const fullName = ((claims?.LastName ?? '') + ' ' + (claims?.FirstName ?? '')).trim() as string | undefined;
 
-  const superAdmins = (process.env.SUPERADMIN_EMAILS ?? '')
+  const superAdmins = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '')
     .split(';')
     .map(s => s.trim())
     .filter(Boolean);

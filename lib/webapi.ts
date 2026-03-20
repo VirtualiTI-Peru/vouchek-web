@@ -1,12 +1,9 @@
 import { getPortalContext } from './portalContext';
 import type { Receipt, Customer } from './api-types';
 
-export async function fetchReceipts(customerId?: string): Promise<Receipt[]> {
-  const ctx = await getPortalContext();
+export async function fetchReceipts(customerId: string): Promise<Receipt[]> {
   const url = new URL('/api/receipts', getApiBaseUrl());
-  if (ctx.isSuperAdmin && customerId) {
-    url.searchParams.set('customerId', customerId);
-  }
+  url.searchParams.set('customerId', customerId);
   return apiFetch<Receipt[]>(url);
 }
 
@@ -57,12 +54,17 @@ async function getAuthToken(): Promise<string> {
 
 async function apiFetch<T>(url: URL, options?: RequestInit): Promise<T> {
   const token = await getAuthToken();
+  // Remove Authorization header for Azurite blob/image requests
+  const isAzuriteBlob = typeof url === 'string' ? url.startsWith('http://127.0.0.1:10000/') : url.toString().startsWith('http://127.0.0.1:10000/');
+  const headers = {
+    ...(options?.headers || {})
+  };
+  if (!isAzuriteBlob) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   const res = await fetch(url, {
     ...options,
-    headers: {
-      ...(options?.headers || {}),
-      Authorization: `Bearer ${token}`
-    },
+    headers,
     cache: 'no-store',
   });
   if (!res.ok) {

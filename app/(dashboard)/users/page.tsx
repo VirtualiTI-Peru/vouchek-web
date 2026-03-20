@@ -1,21 +1,19 @@
-
 import { getPortalContext } from '@/lib/portalContext';
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import UsersTable from '@/app/components/UsersTable';
 
 export default async function AdminPage() {
   const ctx = await getPortalContext();
-  if (!ctx.isSuperAdmin && ctx.role !== 'org:admin') {
-    return <div className="rounded border bg-white p-4">Forbidden.</div>;
+  if (!ctx.isSuperAdmin && ctx.role !== 'org:admin' && ctx.role !== 'org:sistema') {
+    return <div className="rounded border bg-white p-4">Acceso denegado.</div>;
   }
 
   let organizations: { id: string; name: string }[] = [];
+  const orgList = await clerkClient.organizations.getOrganizationList();
   if (ctx.isSuperAdmin) {
-    // Superadmin: fetch all organizations
-    const orgList = await clerkClient.organizations.getOrganizationList();
     organizations = orgList.map((org: any) => ({ id: org.id, name: org.name }));
   } else {
-    organizations = [{ id: ctx.orgId, name: ctx.orgId }];
+    organizations = orgList.filter((org: any) => org.id === ctx.orgId).map((org: any) => ({ id: org.id, name: org.name }));
   }
 
   return (
@@ -27,11 +25,7 @@ export default async function AdminPage() {
       <div className="rounded border bg-white p-4 text-sm text-slate-700">
         <div className="mb-4">
           <label className="block font-medium mb-1">Empresa</label>
-          {ctx.isSuperAdmin ? (
-            <UsersTable organizations={organizations} />
-          ) : (
-            <div className="border rounded px-2 py-1 bg-gray-100 text-gray-500 cursor-not-allowed">{organizations[0]?.name}</div>
-          )}
+          <UsersTable organizations={organizations} />
         </div>
       </div>
     </div>

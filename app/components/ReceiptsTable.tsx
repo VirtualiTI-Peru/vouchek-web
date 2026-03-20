@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { ReceiptsList } from '../../../lib/api-types';
+import type { ReceiptsList } from 'lib/api-types';
 
 type ModalProps = {
 	open: boolean;

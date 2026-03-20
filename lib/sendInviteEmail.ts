@@ -2,7 +2,12 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function sendInviteEmail({ to, inviteLink, orgName, invitedBy }) {
+export async function sendInviteEmail({ to, inviteLink, orgName, invitedBy }: {
+  to: string;
+  inviteLink: string;
+  orgName: string;
+  invitedBy: string;
+}) {
   return resend.emails.send({
     from: 'noreply@yourdomain.com',
     to,

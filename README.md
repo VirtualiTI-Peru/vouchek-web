@@ -7,7 +7,7 @@ Next.js + Tailwind CSS admin portal.
 This app is designed to work with your Clerk JWT custom claims:
 
 - `OrgId`: customer/tenant id
-- `Role`: `org:accountant` or `org:admin`
+- `Role`: `org:verificador` or `org:admin`
 - `Email`: used to detect superadmin
 
 Superadmin is configured by env var `SUPERADMIN_EMAILS` (semicolon-separated).

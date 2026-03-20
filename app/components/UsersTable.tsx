@@ -143,7 +143,7 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 				</thead>
 				<tbody>
 					{loading ? (
-						<tr key={1}><td colSpan={5} className="text-center py-2">Loading...</td></tr>
+						<tr key={1}><td colSpan={5} className="text-center py-2">Estamos preparando los datos...</td></tr>
 					) : members.length === 0 ? (
 						<tr><td colSpan={5} className="text-center py-2">No members found.</td></tr>
 					) : members.map(member => (

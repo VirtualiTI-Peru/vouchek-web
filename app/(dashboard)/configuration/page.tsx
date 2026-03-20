@@ -4,13 +4,23 @@ import React, { useState, useEffect } from "react";
 import CustomersTable from "@/app/components/CustomersTable";
 import { fetchCustomersServerAction } from "./fetch-action";
 import { syncCustomersServerAction } from "./sync-action";
+import { useUser, useOrganization } from "@clerk/nextjs";
 
 export default function SuperAdminPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const { user } = useUser();
+  const { membership } = useOrganization();
 
+  const superAdmins = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '')
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean);
 
+  const isSuperAdmin = superAdmins.includes(user?.emailAddresses?.[0]?.emailAddress ?? '');
+  const isOrgAdmin = membership?.role === 'admin';
+  
   // Initial fetch on mount
   useEffect(() => {
     setLoading(true);
@@ -34,6 +44,10 @@ export default function SuperAdminPage() {
     setSyncing(false);
   };
 
+  if (!isSuperAdmin && !isOrgAdmin) {
+    return <div>Acceso denegado.</div>;
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded border bg-white p-4">
@@ -50,7 +64,7 @@ export default function SuperAdminPage() {
           </form>
         </div>
         {loading ? (
-          <div>Loading...</div>
+          <div>Estamos preparando los datos...</div>
         ) : (
           <CustomersTable customers={customers}></CustomersTable>
         )}
