@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import type { ReceiptsList } from 'lib/api-types';
+import { useEffect, useState } from "react";
+// import { fetchReceipts } from '@/lib/webapi';
 
 type ModalProps = {
 	open: boolean;
@@ -20,13 +20,49 @@ function Modal({ open, onClose, children }: ModalProps) {
 	);
 }
 
-export default function ReceiptsTable({ receipts }: ReceiptsList) {
+type Org = { id: string; name: string };
+
+export default function ReceiptsTable({ organizations }: { organizations: Org[] }) {
+
+	// Default selected org
+	const [selectedOrg, setSelectedOrg] = useState(organizations[0]?.id ?? "");
+	const [receipts, setReceipts] = useState<any[]>([]);
+	const [loading, setLoading] = useState(false);
+
+
 	const [imageModal, setImageModal] = useState<string | null>(null);
 	const [ocrModal, setOcrModal] = useState<string | null>(null);
 	const [highlightedRow, setHighlightedRow] = useState<string | null>(null);
 
+	useEffect(() => {
+		if (!selectedOrg) return;
+		setLoading(true);
+		fetch(`/api/receipts?orgId=${selectedOrg}`)
+			.then(res => res.json())
+			.then(data => {
+				if (Array.isArray(data)) {
+					setReceipts(data);
+				} else {
+					setReceipts([]);
+				}
+			})
+			.finally(() => setLoading(false));
+	}, [selectedOrg]);
+
 	return (
 		<>
+			<div>
+				<select
+					className="border rounded px-2 py-1 mb-2"
+					value={selectedOrg}
+					onChange={e => setSelectedOrg(e.target.value)}
+					disabled={organizations.length <= 1}
+				>
+					{organizations.map(org => (
+						<option key={org.id} value={org.id}>{org.name}</option>
+					))}
+				</select>
+			</div>
 			<div className="overflow-x-auto rounded border bg-white">
 				<table className="min-w-full text-sm">
 					<thead className="bg-slate-50 text-left text-slate-600">

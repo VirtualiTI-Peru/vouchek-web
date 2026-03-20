@@ -125,6 +125,7 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 				className="border rounded px-2 py-1 mb-2"
 				value={selectedOrg}
 				onChange={e => setSelectedOrg(e.target.value)}
+				disabled={organizations.length <= 1}
 			>
 				{organizations.map(org => (
 					<option key={org.id} value={org.id}>{org.name}</option>
