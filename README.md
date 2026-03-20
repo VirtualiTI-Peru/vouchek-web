@@ -1,4 +1,4 @@
-# voucheck Admin
+# vouchek Admin
 
 Next.js + Tailwind CSS admin portal.
 
@@ -14,7 +14,7 @@ Superadmin is configured by env var `SUPERADMIN_EMAILS` (semicolon-separated).
 
 ## Environment
 
-Create `src/voucheck.Admin/.env.local`:
+Create `src/vouchek.Admin/.env.local`:
 
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...`
 - `CLERK_SECRET_KEY=...`
@@ -25,7 +25,7 @@ Create `src/voucheck.Admin/.env.local`:
 ## Run
 
 ```bash
-cd src/voucheck.Admin
+cd src/vouchek.Admin
 npm i
 npm run dev
 ```
