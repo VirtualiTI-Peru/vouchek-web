@@ -55,12 +55,10 @@ async function getAuthToken(): Promise<string> {
 async function apiFetch<T>(url: URL, options?: RequestInit): Promise<T> {
   const token = await getAuthToken();
   // Remove Authorization header for Azurite blob/image requests
-  const isAzuriteBlob = typeof url === 'string' ? url.startsWith('http://127.0.0.1:10000/') : url.toString().startsWith('http://127.0.0.1:10000/');
-  const headers = {
-    ...(options?.headers || {})
-  };
+  const isAzuriteBlob = url.toString().startsWith('http://127.0.0.1:10000/');
+  const headers = new Headers(options?.headers);
   if (!isAzuriteBlob) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.set('Authorization', `Bearer ${token}`);
   }
   const res = await fetch(url, {
     ...options,

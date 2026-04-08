@@ -20,6 +20,11 @@
 # production
 /build
 
+# Azure Web App deployment artifacts
+web*.zip
+webapp-logs*/
+webapp-logs*.zip
+
 # misc
 .DS_Store
 *.pem
