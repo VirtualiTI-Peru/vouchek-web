@@ -90,10 +90,10 @@ export default function ReceiptsTable({ organizations }: { organizations: Org[] 
 									<td className="px-4 py-2">
 										{r.blobUrl ? (
 											<img
-												src={r.blobUrl}
-												alt="Receipt"
-												className="h-12 w-12 object-cover rounded cursor-pointer hover:opacity-80"
-												onClick={() => setImageModal(r.blobUrl ?? null)}
+											src={`/api/receipt-image/${r.userId}/${r.receiptId}`}
+											alt="Receipt"
+											className="h-12 w-12 object-cover rounded cursor-pointer hover:opacity-80"
+											onClick={() => setImageModal(`/api/receipt-image/${r.userId}/${r.receiptId}`)}
 											/>
 										) : (
 											<span className="text-slate-400">No image</span>
