@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 const PUBLIC_ROUTES = [
 	'/sign-in',
 	'/sign-up',
+	'/set-password',
 	'/welcome',
 	'/accept-invite',
 	'/api/invitations/resolve',

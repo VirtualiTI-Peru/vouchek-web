@@ -22,7 +22,13 @@ function Modal({ open, onClose, children }: ModalProps) {
 
 type Org = { id: string; name: string };
 
-export default function ReceiptsTable({ organizations }: { organizations: Org[] }) {
+export default function ReceiptsTable({
+	organizations,
+	showOrganizationSelector = true,
+}: {
+	organizations: Org[];
+	showOrganizationSelector?: boolean;
+}) {
 
 	// Default selected org
 	const [selectedOrg, setSelectedOrg] = useState(organizations[0]?.id ?? "");
@@ -51,6 +57,7 @@ export default function ReceiptsTable({ organizations }: { organizations: Org[] 
 
 	return (
 		<>
+			{showOrganizationSelector && (
 			<div>
 				<select
 					className="border rounded px-2 py-1 mb-2"
@@ -63,6 +70,7 @@ export default function ReceiptsTable({ organizations }: { organizations: Org[] 
 					))}
 				</select>
 			</div>
+			)}
 			<div className="overflow-x-auto rounded border bg-white">
 				<table className="min-w-full text-sm">
 					<thead className="bg-slate-50 text-left text-slate-600">

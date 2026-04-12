@@ -21,13 +21,21 @@ type Invitation = {
 
 type Org = { id: string; name: string };
 
-export default function UsersTable({ organizations }: { organizations: Org[] }) {
+export default function UsersTable({
+	organizations,
+	showOrganizationSelector = true,
+}: {
+	organizations: Org[];
+	showOrganizationSelector?: boolean;
+}) {
 	const [selectedOrg, setSelectedOrg] = useState(organizations[0]?.id ?? "");
 	const [activeTab, setActiveTab] = useState<"users" | "invitations">("users");
 	const [members, setMembers] = useState<Member[]>([]);
 	const [invitations, setInvitations] = useState<Invitation[]>([]);
 	const [loadingMembers, setLoadingMembers] = useState(false);
 	const [loadingInvitations, setLoadingInvitations] = useState(false);
+	const [resettingUserId, setResettingUserId] = useState("");
+	const [membersMessage, setMembersMessage] = useState("");
 	const [invitationMessage, setInvitationMessage] = useState("");
 
 	const loadMembers = async (orgId: string) => {
@@ -71,8 +79,30 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 
 	// Action handlers
 	const handleResetPassword = async (member: Member) => {
-		// TODO: Implement API call to send password reset email
-		alert(`Password reset link would be sent to: ${member.email}`);
+		setMembersMessage("");
+		if (!member.id || !member.email || !selectedOrg) {
+			setMembersMessage("No se pudo preparar el reenvio del enlace.");
+			return;
+		}
+
+		setResettingUserId(member.id);
+		try {
+			const res = await fetch('/api/reset-password', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId: member.id, orgId: selectedOrg }),
+			});
+			const data = await res.json().catch(() => ({}));
+
+			if (!res.ok) {
+				setMembersMessage(data?.error ?? 'No se pudo reenviar el correo.');
+				return;
+			}
+
+			setMembersMessage(`Se envio un nuevo enlace de configuracion a ${member.email}.`);
+		} finally {
+			setResettingUserId("");
+		}
 	};
 
 	const handleDeleteUser = async (member: Member) => {
@@ -108,16 +138,18 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 
 	return (
 		<div>
-			<select
-				className="border rounded px-2 py-1 mb-2"
-				value={selectedOrg}
-				onChange={e => setSelectedOrg(e.target.value)}
-				disabled={organizations.length <= 1}
-			>
-				{organizations.map(org => (
-					<option key={org.id} value={org.id}>{org.name}</option>
-				))}
-			</select>
+			{showOrganizationSelector && (
+				<select
+					className="border rounded px-2 py-1 mb-2"
+					value={selectedOrg}
+					onChange={e => setSelectedOrg(e.target.value)}
+					disabled={organizations.length <= 1}
+				>
+					{organizations.map(org => (
+						<option key={org.id} value={org.id}>{org.name}</option>
+					))}
+				</select>
+			)}
 			<div className="mb-3 mt-2 inline-flex rounded-lg border border-slate-200 p-1 text-sm">
 				<button
 					className={`rounded-md px-3 py-1 ${activeTab === "users" ? "bg-slate-900 text-white" : "text-slate-600"}`}
@@ -161,13 +193,21 @@ export default function UsersTable({ organizations }: { organizations: Org[] }) 
 									<td className="px-2 py-1 border">{member.status ?? <span className="text-slate-400">Unknown</span>}</td>
 									<td className="px-2 py-1 border">{member.lastSignInAt ? new Date(member.lastSignInAt).toLocaleString() : <span className="text-slate-400"></span>}</td>
 									<td className="px-2 py-1 border space-x-2">
-										<button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleResetPassword(member)}>Restablecer Contrasena</button>
+										<button
+											className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded disabled:opacity-50"
+											onClick={() => void handleResetPassword(member)}
+											disabled={resettingUserId === member.id}
+										>
+											{resettingUserId === member.id ? 'Enviando...' : 'Restablecer Contrasena'}
+										</button>
 										<button className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleDeleteUser(member)}>Eliminar</button>
 									</td>
 								</tr>
 							))}
 						</tbody>
 					</table>
+
+					{membersMessage && <div className="mt-2 text-xs text-slate-600">{membersMessage}</div>}
 
 					<div className="mt-6 border rounded p-4 bg-slate-50">
 					  <div className="font-semibold mb-2">Crear nuevo usuario</div>

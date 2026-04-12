@@ -32,8 +32,8 @@ export default async function AdminPage() {
 
       <div className="rounded border bg-white p-4 text-sm text-slate-700">
         <div className="mb-4">
-          <label className="block font-medium mb-1">Empresa</label>
-          <UsersTable organizations={organizations} />
+          {ctx.role === 'org:sistema' && !ctx.isSuperAdmin ? null : <label className="block font-medium mb-1">Empresa</label>}
+          <UsersTable organizations={organizations} showOrganizationSelector={!(ctx.role === 'org:sistema' && !ctx.isSuperAdmin)} />
         </div>
       </div>
     </div>

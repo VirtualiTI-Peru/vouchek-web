@@ -54,6 +54,9 @@ export async function POST(req: NextRequest) {
     const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email,
+      options: {
+        redirectTo: `${req.nextUrl.origin}/set-password`,
+      },
     });
 
     // Look up org name
@@ -63,7 +66,7 @@ export async function POST(req: NextRequest) {
     if (linkData?.properties?.action_link) {
       const welcomeResult = await sendWelcomeEmail({
         to: email,
-        loginLink: linkData.properties.action_link,
+        setupLink: linkData.properties.action_link,
         orgName,
         firstName,
       });

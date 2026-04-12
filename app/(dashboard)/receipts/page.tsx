@@ -1,6 +1,6 @@
-import { fetchCustomers } from '@/lib/webapi';
 import { getPortalContext } from '@/lib/portalContext';
 import ReceiptsTable from '@/app/components/ReceiptsTable';
+import { createClient } from '@supabase/supabase-js';
 
 export default async function ReceiptsPage() {
   const ctx = await getPortalContext();
@@ -8,13 +8,26 @@ export default async function ReceiptsPage() {
     return <div className="rounded border bg-white p-4">Acceso denegado.</div>;
   }
 
-  // Fetch customers/organizations from backend
+  // Fetch organizations from Supabase
   let organizations: { id: string; name: string }[] = [];
   try {
-    const customers = await fetchCustomers();
-    organizations = customers.map(c => ({ id: c.customerId, name: c.customerName ?? c.customerId }));
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data: orgs } = await supabaseAdmin
+      .from('organizations')
+      .select('id, name')
+      .order('name', { ascending: true });
+
+    const allOrganizations = (orgs ?? []).map((o: any) => ({ id: o.id, name: o.name ?? o.id }));
     if (!ctx.isSuperAdmin) {
-      organizations = organizations.filter(o => o.id === ctx.orgId);
+      const ownOrganization = allOrganizations.find(o => o.id === ctx.orgId);
+      organizations = ownOrganization
+        ? [ownOrganization]
+        : [{ id: ctx.orgId, name: ctx.orgId }];
+    } else {
+      organizations = allOrganizations;
     }
   } catch { /* leave empty */ }
 
@@ -24,7 +37,7 @@ export default async function ReceiptsPage() {
         <div className="text-lg font-semibold">Vouchers</div>
       </div>
       {/* Pass organizations as prop to ReceiptsTable (client component) */}
-      <ReceiptsTable organizations={organizations} />
+      <ReceiptsTable organizations={organizations} showOrganizationSelector={ctx.isSuperAdmin} />
     </div>
   );
 }

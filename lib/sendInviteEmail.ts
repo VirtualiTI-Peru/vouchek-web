@@ -51,8 +51,13 @@ function inviteHtml({ inviteLink, orgName, invitedBy, roleName }: {
 </html>`;
 }
 
-function welcomeHtml({ loginLink, orgName, firstName }: {
-  loginLink: string; orgName: string; firstName: string;
+function welcomeHtml({ actionLink, actionLabel, actionMessage, footerMessage, orgName, firstName }: {
+  actionLink: string;
+  actionLabel: string;
+  actionMessage: string;
+  footerMessage: string;
+  orgName: string;
+  firstName: string;
 }) {
   const year = new Date().getFullYear();
   return `<!DOCTYPE html>
@@ -72,13 +77,13 @@ function welcomeHtml({ loginLink, orgName, firstName }: {
             Tu cuenta ha sido creada en <strong>${orgName}</strong>.
           </p>
           <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 28px">
-            Haz clic en el boton a continuacion para iniciar sesion y acceder a la plataforma.
+            ${actionMessage}
           </p>
-          <a href="${loginLink}" style="display:inline-block;background:#1e40af;color:#fff;font-size:15px;font-weight:bold;padding:14px 28px;border-radius:8px;text-decoration:none">
-            Iniciar sesion
+          <a href="${actionLink}" style="display:inline-block;background:#1e40af;color:#fff;font-size:15px;font-weight:bold;padding:14px 28px;border-radius:8px;text-decoration:none">
+            ${actionLabel}
           </a>
           <p style="color:#94a3b8;font-size:12px;margin:28px 0 0;line-height:1.5">
-            Este enlace expira en 24 horas.
+            ${footerMessage}
           </p>
         </td></tr>
         <tr><td style="background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #e2e8f0">
@@ -107,16 +112,36 @@ export async function sendInviteEmail({ to, inviteLink, orgName, invitedBy, role
   });
 }
 
-export async function sendWelcomeEmail({ to, loginLink, orgName, firstName }: {
+export async function sendWelcomeEmail({ to, setupLink, loginLink, orgName, firstName }: {
   to: string;
-  loginLink: string;
+  setupLink?: string;
+  loginLink?: string;
   orgName: string;
   firstName: string;
 }) {
+  const actionLink = setupLink ?? loginLink;
+
+  if (!actionLink) {
+    throw new Error('sendWelcomeEmail requires setupLink or loginLink');
+  }
+
+  const isSetupFlow = Boolean(setupLink);
+
   return resend.emails.send({
     from: process.env.RESEND_SENDER_EMAIL!,
     to,
     subject: `Bienvenido a VouChek - ${orgName}`,
-    html: welcomeHtml({ loginLink, orgName, firstName }),
+    html: welcomeHtml({
+      actionLink,
+      actionLabel: isSetupFlow ? 'Configurar contrasena' : 'Iniciar sesion',
+      actionMessage: isSetupFlow
+        ? 'Haz clic en el boton a continuacion para configurar tu contrasena y activar tu acceso a la plataforma.'
+        : 'Haz clic en el boton a continuacion para iniciar sesion y acceder a la plataforma.',
+      footerMessage: isSetupFlow
+        ? 'Este enlace expira en 24 horas. Despues de guardar tu contrasena, podras iniciar sesion en VouChek.'
+        : 'Puedes usar este acceso para ingresar a VouChek.',
+      orgName,
+      firstName,
+    }),
   });
 }
