@@ -1,5 +1,3 @@
-import Link from 'next/link';
-import { UserButton } from '@clerk/nextjs';
 import { getPortalContext } from '@/lib/portalContext';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -10,12 +8,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <div className="font-semibold">vouchek Admin</div>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-6xl px-4 py-6">
         {children}
       </main>

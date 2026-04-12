@@ -1,5 +1,5 @@
 import { getPortalContext } from '@/lib/portalContext';
-import { clerkClient } from '@clerk/clerk-sdk-node';
+import { createClient } from '@supabase/supabase-js';
 import UsersTable from '@/app/components/UsersTable';
 
 export default async function AdminPage() {
@@ -9,12 +9,20 @@ export default async function AdminPage() {
   }
 
   let organizations: { id: string; name: string }[] = [];
-  const orgList = await clerkClient.organizations.getOrganizationList();
-  if (ctx.isSuperAdmin) {
-    organizations = orgList.map((org: any) => ({ id: org.id, name: org.name }));
-  } else {
-    organizations = orgList.filter((org: any) => org.id === ctx.orgId).map((org: any) => ({ id: org.id, name: org.name }));
-  }
+  try {
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data: orgs } = await supabaseAdmin
+      .from('organizations')
+      .select('id, name')
+      .order('name', { ascending: true });
+    organizations = (orgs ?? []).map((o: any) => ({ id: o.id, name: o.name ?? o.id }));
+    if (!ctx.isSuperAdmin) {
+      organizations = organizations.filter(o => o.id === ctx.orgId);
+    }
+  } catch { /* leave empty */ }
 
   return (
     <div className="space-y-4">
@@ -24,8 +32,8 @@ export default async function AdminPage() {
 
       <div className="rounded border bg-white p-4 text-sm text-slate-700">
         <div className="mb-4">
-          <label className="block font-medium mb-1">Empresa</label>
-          <UsersTable organizations={organizations} />
+          {ctx.role === 'org:sistema' && !ctx.isSuperAdmin ? null : <label className="block font-medium mb-1">Empresa</label>}
+          <UsersTable organizations={organizations} showOrganizationSelector={!(ctx.role === 'org:sistema' && !ctx.isSuperAdmin)} />
         </div>
       </div>
     </div>

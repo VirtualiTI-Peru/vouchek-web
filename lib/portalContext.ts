@@ -1,4 +1,6 @@
-import { auth } from '@clerk/nextjs/server';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 
 export type PortalRole = 'org:verificador' | 'org:admin' | string;
 
@@ -11,47 +13,54 @@ export type PortalContext = {
   fullName?: string;
 };
 
-function parseJwtPayload(token: string): any {
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-  const payload = parts[1]
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-  const json = Buffer.from(payload, 'base64').toString('utf8');
-  return JSON.parse(json);
-}
-
 export async function getPortalContext(): Promise<PortalContext> {
-  const session = await auth();
-  if (!session.userId) {
-    throw new Error('Not authenticated');
-  }
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        },
+      },
+    }
+  );
 
-  const template = process.env.CLERK_JWT_TEMPLATE;
-  const token = await session.getToken(template ? { template } : undefined);
-  if (!token) {
-    throw new Error('Missing auth token');
-  }
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (!user || error) throw new Error('Not authenticated');
 
-  const claims = parseJwtPayload(token) ?? {};
-  const email = claims?.Email as string | undefined;
-  const orgId = (claims?.OrgId as string | undefined) ?? '';
-  const role = claims?.Role as PortalRole | undefined;
-  const fullName = ((claims?.LastName ?? '') + ' ' + (claims?.FirstName ?? '')).trim() as string | undefined;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Missing auth token');
 
-  const superAdmins = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '')
-    .split(';')
-    .map(s => s.trim())
-    .filter(Boolean);
+  const appMeta = user.app_metadata ?? {};
+  const email = user.email;
+  const orgId = (appMeta.org_id as string | undefined) ?? '';
+  const role = (appMeta.role as string | undefined) as PortalRole | undefined;
 
-  const isSuperAdmin = !!email && superAdmins.some(e => e.toLowerCase() === email.toLowerCase());
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('first_name, last_name, is_super_admin')
+    .eq('user_id', user.id)
+    .single();
+
+  const firstName = profile?.first_name ?? '';
+  const lastName = profile?.last_name ?? '';
+  const fullName = `${firstName} ${lastName}`.trim() || undefined;
+  const isSuperAdmin = profile?.is_super_admin === true;
 
   if (!orgId && !isSuperAdmin) {
-    throw new Error('Missing OrgId claim');
+    throw new Error('Missing org_id claim');
   }
 
   return {
-    userId: session.userId,
+    userId: user.id,
     orgId,
     email,
     role,

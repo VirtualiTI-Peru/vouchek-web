@@ -16,25 +16,6 @@ export async function fetchCustomers(): Promise<Customer[]> {
   return apiFetch<Customer[]>(url);
 }
 
-// Sync Clerk organizations to backend Customers table
-export async function syncCustomersFromClerk(): Promise<any> {
-  const token = await getAuthToken();
-  const url = new URL('/api/customers/sync-from-clerk', getApiBaseUrl());
-  
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(errorText || `API error: ${res.status}`);
-  }
-  return res.json();
-}
-
 // --- Helpers ---
 
 function getApiBaseUrl(): string {
@@ -44,10 +25,23 @@ function getApiBaseUrl(): string {
 }
 
 async function getAuthToken(): Promise<string> {
-  const template = process.env.CLERK_JWT_TEMPLATE;
-  const { auth } = await import('@clerk/nextjs/server');
-  const session = await auth();
-  const token = await session.getToken(template ? { template } : undefined);
+  const { createServerClient } = await import('@supabase/ssr');
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        },
+      },
+    }
+  );
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
   if (!token) throw new Error('Missing auth token');
   return token;
 }

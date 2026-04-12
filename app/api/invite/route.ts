@@ -1,55 +1,95 @@
-
 import { NextRequest, NextResponse } from "next/server";
-import { clerkClient } from "@clerk/clerk-sdk-node";
+import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { sendInviteEmail } from "@/lib/sendInviteEmail";
-import { getAuth } from "@clerk/nextjs/server";
+import { createHash, randomBytes } from "crypto";
 
 export async function POST(req: NextRequest) {
-
   try {
-    const { email, orgId, invitedBy, role } = await req.json();
+    const { email, orgId, role } = await req.json();
     if (!email || !orgId || !role) {
       return NextResponse.json({ error: "Missing email, orgId or role" }, { status: 400 });
     }
-    // Get logged-in userId from Clerk
-    const { userId } = getAuth(req);
-    if (!userId) {
+
+    // Verify caller is authenticated
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return req.cookies.getAll(); },
+          setAll() {},
+        },
+      }
+    );
+    const { data: { user: caller } } = await supabase.auth.getUser();
+    if (!caller) {
       return NextResponse.json({ error: "No authenticated user found" }, { status: 401 });
     }
-    // Check if user already exists in the organization
-    const memberships = await clerkClient.organizations.getOrganizationMembershipList({ organizationId: orgId });
-    const exists = memberships.some((m: any) => m.publicUserData?.identifier?.toLowerCase() === email.toLowerCase() || m.publicUserData?.emailAddress?.toLowerCase() === email.toLowerCase());
-    if (exists) {
-      return NextResponse.json({ error: "El usuario ya existe en la organización." }, { status: 409 });
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Prevent duplicate pending invites for the same organization/email.
+    const { data: existingInvite } = await supabaseAdmin
+      .from("invitations")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("email", normalizedEmail)
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (existingInvite?.id) {
+      return NextResponse.json({ error: "Ya existe una invitacion pendiente para este usuario." }, { status: 409 });
     }
-    // Get org info for email
-    const org = await clerkClient.organizations.getOrganization({ organizationId: orgId });
-    // Try to create invitation in Clerk
-    let invitation;
-    try {
-      invitation = await clerkClient.organizations.createOrganizationInvitation({
-        organizationId: orgId,
-        emailAddress: email,
-        inviterUserId: userId,
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { error: invitationError } = await supabaseAdmin
+      .from("invitations")
+      .insert({
+        org_id: orgId,
+        email: normalizedEmail,
         role,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+        invited_by: caller.id,
       });
-      // Log the invitation response for debugging
-      console.log('Clerk invitation response:', invitation);
-    } catch (err: any) {
-      // Clerk error: invitation already exists
-      if (err?.errors && Array.isArray(err.errors)) {
-        const alreadyExists = err.errors.find((e: any) =>
-          e.code === "duplicate_record" ||
-          (typeof e.message === "string" && e.message.toLowerCase().includes("duplicate invitation"))
-        );
-        if (alreadyExists) {
-          return NextResponse.json({ error: "Ya existe una invitación activa para este usuario." }, { status: 409 });
-        }
-      }
-      // Other Clerk errors
-      return NextResponse.json({ error: err?.message || "Error al invitar usuario" }, { status: 500 });
+
+    if (invitationError) {
+      return NextResponse.json({ error: invitationError.message || "Error al crear invitacion" }, { status: 500 });
     }
-    return NextResponse.json({ success: true, invitation });
+
+    const appUrl = req.nextUrl.origin;
+    const inviteLink = `${appUrl}/accept-invite?token=${encodeURIComponent(rawToken)}`;
+
+    // Look up org name and caller profile for the email
+    const [{ data: org }, { data: callerProfile }] = await Promise.all([
+      supabaseAdmin.from('organizations').select('name').eq('id', orgId).single(),
+      supabaseAdmin.from('profiles').select('first_name, last_name').eq('user_id', caller.id).single(),
+    ]);
+
+    const orgName = org?.name ?? orgId;
+    const invitedBy = [callerProfile?.first_name, callerProfile?.last_name].filter(Boolean).join(' ') || caller.email!;
+
+    // Send custom invite email via Resend
+    const emailResult = await sendInviteEmail({ to: email, inviteLink, orgName, invitedBy, role });
+    if (emailResult.error) {
+      console.error('Resend error:', emailResult.error);
+      // The invitation is already stored, so we keep success and allow re-send flows later.
+    } else {
+      console.log('Invite email sent to:', email);
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Failed to send invitation" }, { status: 500 });
   }
