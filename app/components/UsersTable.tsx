@@ -35,6 +35,7 @@ export default function UsersTable({
 	const [loadingMembers, setLoadingMembers] = useState(false);
 	const [loadingInvitations, setLoadingInvitations] = useState(false);
 	const [resettingUserId, setResettingUserId] = useState("");
+	const [deletingUserId, setDeletingUserId] = useState("");
 	const [membersMessage, setMembersMessage] = useState("");
 	const [invitationMessage, setInvitationMessage] = useState("");
 
@@ -106,9 +107,34 @@ export default function UsersTable({
 	};
 
 	const handleDeleteUser = async (member: Member) => {
-		// TODO: Implement API call to delete user
-		if (confirm(`Are you sure you want to delete user: ${member.email}?`)) {
-			alert(`User ${member.email} would be deleted (API call placeholder).`);
+		setMembersMessage("");
+		if (!member.id || !member.email || !selectedOrg) {
+			setMembersMessage('No se pudo preparar la eliminacion del usuario.');
+			return;
+		}
+
+		if (!confirm(`Esta accion eliminara al usuario ${member.email}. Deseas continuar?`)) {
+			return;
+		}
+
+		setDeletingUserId(member.id);
+		try {
+			const res = await fetch('/api/delete-user', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId: member.id, orgId: selectedOrg }),
+			});
+			const data = await res.json().catch(() => ({}));
+
+			if (!res.ok) {
+				setMembersMessage(data?.error ?? 'No se pudo eliminar el usuario.');
+				return;
+			}
+
+			setMembersMessage(`Usuario ${member.email} eliminado.`);
+			await loadMembers(selectedOrg);
+		} finally {
+			setDeletingUserId("");
 		}
 	};
 
@@ -196,11 +222,17 @@ export default function UsersTable({
 										<button
 											className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded disabled:opacity-50"
 											onClick={() => void handleResetPassword(member)}
-											disabled={resettingUserId === member.id}
+											disabled={resettingUserId === member.id || deletingUserId === member.id}
 										>
 											{resettingUserId === member.id ? 'Enviando...' : 'Restablecer Contrasena'}
 										</button>
-										<button className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded" onClick={() => handleDeleteUser(member)}>Eliminar</button>
+										<button
+											className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded disabled:opacity-50"
+											onClick={() => void handleDeleteUser(member)}
+											disabled={deletingUserId === member.id || resettingUserId === member.id}
+										>
+											{deletingUserId === member.id ? 'Eliminando...' : 'Eliminar'}
+										</button>
 									</td>
 								</tr>
 							))}
