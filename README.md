@@ -6,18 +6,18 @@ This project is the web administration portal for Vouchek.
 
 It is intended for organization administrators and verification/accounting users to:
 
-- sign in with Clerk
+- sign in with Supabase
 - review processed receipts
 - manage customers and organization members
 - trigger organization synchronization with backend data
 
-The web app depends on the backend WebApi for business operations and on Clerk for authentication.
+The web app depends on the backend WebApi for business operations and on Supabase for authentication.
 
 ## Stack
 
 - Next.js
 - React
-- Clerk
+- Supabase JS
 - Tailwind CSS
 
 ## Environment Variables
@@ -26,9 +26,8 @@ Create a local `.env.local` file in this folder.
 
 Required:
 
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`: Clerk publishable key used by the browser
-- `CLERK_SECRET_KEY`: Clerk server-side secret key used by server routes
-- `CLERK_JWT_TEMPLATE`: Clerk JWT template name used to mint backend-facing tokens
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key
 - `API_BASE_URL`: base URL of the Vouchek WebApi, for example `https://localhost:7231`
 - `NEXT_PUBLIC_SUPERADMIN_EMAILS`: semicolon-separated superadmin email list
 
@@ -44,7 +43,7 @@ Prerequisites:
 - Node.js 20 LTS or newer
 - npm
 - running Vouchek backend WebApi
-- a Clerk application with the required JWT template and claims
+- a Supabase project with the required JWT claims
 
 Steps:
 
@@ -61,7 +60,7 @@ The app will usually run on `http://localhost:3000`.
 
 ## Authentication Assumptions
 
-This app expects Clerk-issued JWTs to include custom claims used by the backend and portal logic:
+This app expects Supabase-issued JWTs to include custom claims used by the backend and portal logic:
 
 - `OrgId`
 - `Role`
@@ -75,7 +74,7 @@ Expected roles currently used by the backend include:
 
 ## Local Verification Checklist
 
-- Sign in through Clerk successfully.
+- Sign in through Supabase successfully.
 - Load customers from the backend.
 - Load receipts from the backend.
 - Verify role-based access behavior.
