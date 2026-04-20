@@ -28,6 +28,12 @@ const RECEIPTS_SUMMARY_CACHE_TTL_MS = getReceiptsSummaryCacheTtlMs();
 const receiptPagesCache = new Map<string, ReceiptPageCacheEntry>();
 const receiptSummaryCache = new Map<string, ReceiptSummaryCacheEntry>();
 
+function getDefaultPageSize(): number {
+  const envValue = process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE;
+  const parsed = envValue ? parseInt(envValue, 10) : null;
+  return parsed && parsed > 0 ? parsed : 50;
+}
+
 export async function fetchReceipts(customerId: string, options: FetchReceiptsOptions = {}): Promise<Receipt[]> {
   const page = await fetchReceiptsPage(customerId, {
     take: 200,
@@ -39,7 +45,7 @@ export async function fetchReceipts(customerId: string, options: FetchReceiptsOp
 
 export async function fetchReceiptsPage(customerId: string, options: FetchReceiptPageOptions = {}): Promise<ReceiptPage> {
   const normalizedCustomerId = customerId.trim();
-  const take = normalizeTake(options.take ?? 50);
+  const take = normalizeTake(options.take ?? getDefaultPageSize());
   const skip = normalizeSkip(options.skip ?? 0);
 
   if (!normalizedCustomerId) {

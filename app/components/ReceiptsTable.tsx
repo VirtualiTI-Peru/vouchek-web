@@ -14,8 +14,10 @@ type LoadReceiptsOptions = {
 	forceRefresh?: boolean;
 };
 
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = Number(process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE) || 50;
 const INVALIDATION_POLL_MS = 15_000;
+
+console.log('ReceiptsTable - NEXT_PUBLIC_RECEIPTS_PAGE_SIZE:', process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE, 'DEFAULT_PAGE_SIZE:', DEFAULT_PAGE_SIZE);
 
 function Modal({ open, onClose, children }: ModalProps) {
 	if (!open) return null;

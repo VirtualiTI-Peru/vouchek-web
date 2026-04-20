@@ -4,7 +4,7 @@ import type { ReceiptPage } from '@/lib/api-types';
 import ReceiptsTable from '@/app/components/ReceiptsTable';
 import { createClient } from '@supabase/supabase-js';
 
-const INITIAL_RECEIPTS_PAGE_SIZE = 50;
+const INITIAL_RECEIPTS_PAGE_SIZE = Number(process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE) || 50;
 
 export default async function ReceiptsPage() {
   const ctx = await getPortalContext();

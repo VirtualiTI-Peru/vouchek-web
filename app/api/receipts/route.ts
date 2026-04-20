@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPortalContext } from '@/lib/portalContext';
 import { fetchReceiptsPage } from '@/lib/webapi';
 
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = Number(process.env.RECEIPTS_PAGE_SIZE) || 50;
 const MAX_PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
