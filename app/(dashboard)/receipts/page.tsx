@@ -1,6 +1,10 @@
 import { getPortalContext } from '@/lib/portalContext';
+import { fetchReceiptsPage } from '@/lib/webapi';
+import type { ReceiptPage } from '@/lib/api-types';
 import ReceiptsTable from '@/app/components/ReceiptsTable';
 import { createClient } from '@supabase/supabase-js';
+
+const INITIAL_RECEIPTS_PAGE_SIZE = 50;
 
 export default async function ReceiptsPage() {
   const ctx = await getPortalContext();
@@ -8,8 +12,16 @@ export default async function ReceiptsPage() {
     return <div className="rounded border bg-white p-4">Acceso denegado.</div>;
   }
 
-  // Fetch organizations from Supabase
   let organizations: { id: string; name: string }[] = [];
+  let initialReceiptsPage: ReceiptPage = {
+    customerId: '',
+    page: 1,
+    pageSize: INITIAL_RECEIPTS_PAGE_SIZE,
+    hasMore: false,
+    lastUpdatedAt: null,
+    receipts: [],
+  };
+
   try {
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,13 +43,34 @@ export default async function ReceiptsPage() {
     }
   } catch { /* leave empty */ }
 
+  const initialOrgId = organizations[0]?.id;
+  if (initialOrgId) {
+    try {
+      initialReceiptsPage = await fetchReceiptsPage(initialOrgId, {
+        take: INITIAL_RECEIPTS_PAGE_SIZE,
+      });
+    } catch {
+      initialReceiptsPage = {
+        customerId: initialOrgId,
+        page: 1,
+        pageSize: INITIAL_RECEIPTS_PAGE_SIZE,
+        hasMore: false,
+        lastUpdatedAt: null,
+        receipts: [],
+      };
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded border bg-white p-4">
         <div className="text-lg font-semibold">Vouchers</div>
       </div>
-      {/* Pass organizations as prop to ReceiptsTable (client component) */}
-      <ReceiptsTable organizations={organizations} showOrganizationSelector={ctx.isSuperAdmin} />
+      <ReceiptsTable
+        organizations={organizations}
+        initialReceiptsPage={initialReceiptsPage}
+        showOrganizationSelector={ctx.isSuperAdmin}
+      />
     </div>
   );
 }
