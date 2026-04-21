@@ -1,7 +1,7 @@
 import { getPortalContext } from '@/lib/portalContext';
 import { fetchReceiptsPage } from '@/lib/webapi';
 import type { ReceiptPage } from '@/lib/api-types';
-import ReceiptsTable from '@/app/components/ReceiptsTable';
+import ReceiptsTable from '@/app/components/ReceiptsTableMantine';
 import { createClient } from '@supabase/supabase-js';
 
 const INITIAL_RECEIPTS_PAGE_SIZE = Number(process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE) || 50;
@@ -68,7 +68,6 @@ export default async function ReceiptsPage() {
       </div>
       <ReceiptsTable
         organizations={organizations}
-        initialReceiptsPage={initialReceiptsPage}
         showOrganizationSelector={ctx.isSuperAdmin}
       />
     </div>

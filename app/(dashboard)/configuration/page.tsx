@@ -1,8 +1,18 @@
 
 "use client";
 import React, { useState, useEffect } from "react";
-import CustomersTable from "@/app/components/CustomersTable";
+import CustomersTable from "@/app/components/CustomersTableMantine";
 import { createBrowserClient } from "@supabase/ssr";
+import {
+  TextInput,
+  Button,
+  Checkbox,
+  Group,
+  Title,
+  Paper,
+  Stack,
+  Loader,
+} from "@mantine/core";
 
 type Organization = {
   id: string;
@@ -125,62 +135,68 @@ export default function SuperAdminPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded border bg-white p-4">
-        <div className="flex items-center mb-2">
-          <div className="font-medium mr-4">Lista de Organizaciones</div>
-        </div>
+    <Stack gap="md">
+      <Paper withBorder p="md">
+        <Title order={4} mb="md">Lista de Organizaciones</Title>
+
         {isSuperAdmin && (
-          <form onSubmit={handleCreateOrganization} className="mb-4 grid gap-2 rounded border bg-slate-50 p-3 md:grid-cols-5">
-            <input
-              className="rounded border px-2 py-1"
-              placeholder="Nombre"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              disabled={creating}
-            />
-            <input
-              className="rounded border px-2 py-1"
-              placeholder="Codigo"
-              value={code}
-              onChange={e => setCode(e.target.value)}
-              disabled={creating}
-            />
-            <input
-              className="rounded border px-2 py-1"
-              placeholder="RUC"
-              value={ruc}
-              onChange={e => setRuc(e.target.value)}
-              disabled={creating}
-            />
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={e => setIsActive(e.target.checked)}
-                disabled={creating}
-              />
-              Activo
-            </label>
-            <button
-              className="rounded bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              type="submit"
-              disabled={creating}
-            >
-              {creating ? 'Creando...' : 'Crear organizacion'}
-            </button>
-          </form>
+          <Paper withBorder p="md" mb="md" bg="gray.0">
+            <form onSubmit={handleCreateOrganization}>
+              <Group grow mb="md">
+                <TextInput
+                  placeholder="Nombre"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={creating}
+                  required
+                />
+                <TextInput
+                  placeholder="Código"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  disabled={creating}
+                  required
+                />
+                <TextInput
+                  placeholder="RUC"
+                  value={ruc}
+                  onChange={(e) => setRuc(e.target.value)}
+                  disabled={creating}
+                />
+              </Group>
+
+              <Group justify="space-between" align="center">
+                <Checkbox
+                  label="Activo"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  disabled={creating}
+                />
+                <Button
+                  type="submit"
+                  disabled={creating}
+                  loading={creating}
+                >
+                  Crear organización
+                </Button>
+              </Group>
+            </form>
+          </Paper>
         )}
+
         {loading ? (
-          <div>Estamos preparando los datos...</div>
+          <Group justify="center" py="xl">
+            <Loader />
+            <span>Cargando organizaciones...</span>
+          </Group>
         ) : (
           <CustomersTable
             organizations={organizations}
             canManage={isSuperAdmin}
             onToggleStatus={handleToggleStatus}
-          ></CustomersTable>
+          />
         )}
-      </div>
-    </div>
+      </Paper>
+    </Stack>
   );
 }

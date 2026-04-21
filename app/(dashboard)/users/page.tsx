@@ -1,6 +1,6 @@
 import { getPortalContext } from '@/lib/portalContext';
 import { createClient } from '@supabase/supabase-js';
-import UsersTable from '@/app/components/UsersTable';
+import UsersTable from '@/app/components/UsersTableMantine';
 
 export default async function AdminPage() {
   const ctx = await getPortalContext();
@@ -26,20 +26,11 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded border bg-white p-4">
-        <div className="text-lg font-semibold">Usuarios</div>
-      </div>
-
-      <div className="rounded border bg-white p-4 text-sm text-slate-700">
-        <div className="mb-4">
-          {ctx.role === 'org:sistema' && !ctx.isSuperAdmin ? null : <label className="block font-medium mb-1">Empresa</label>}
-          <UsersTable 
-            organizations={organizations} 
-            showOrganizationSelector={!(ctx.role === 'org:sistema' && !ctx.isSuperAdmin)}
-            isSuperAdmin={ctx.isSuperAdmin}
-          />
-        </div>
-      </div>
+      <UsersTable
+        organizations={organizations}
+        showOrganizationSelector={!(ctx.role === 'org:sistema' && !ctx.isSuperAdmin)}
+        isSuperAdmin={ctx.isSuperAdmin}
+      />
     </div>
   );
 }
