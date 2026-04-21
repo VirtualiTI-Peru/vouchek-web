@@ -76,27 +76,27 @@ export default function ReceiptsTable({
     return new Date(lastUpdatedAt).toLocaleString();
   }
 
-  function clearOrgCache(orgId: string) {
+  function clearOrgCache(customerId: string) {
     Object.keys(pageCacheRef.current).forEach((key) => {
-      if (key.startsWith(`${orgId}:`)) {
+      if (key.startsWith(`${customerId}:`)) {
         delete pageCacheRef.current[key];
       }
     });
   }
 
-  async function loadReceiptsPage(orgId: string, page: number, options: LoadReceiptsOptions = {}) {
-    if (!orgId) {
-      setReceiptPage(buildEmptyPage(orgId, page));
+  async function loadReceiptsPage(customerId: string, page: number, options: LoadReceiptsOptions = {}) {
+    if (!customerId) {
+      setReceiptPage(buildEmptyPage(customerId, page));
       setError(null);
       return;
     }
 
-    const cacheKey = buildCacheKey(orgId, page);
+    const cacheKey = buildCacheKey(customerId, page);
     const cachedPage = pageCacheRef.current[cacheKey];
     if (!options.forceRefresh && cachedPage) {
       setReceiptPage(cachedPage);
       setError(null);
-      lastKnownUpdateRef.current[orgId] = cachedPage.lastUpdatedAt ?? null;
+      lastKnownUpdateRef.current[customerId] = cachedPage.lastUpdatedAt ?? null;
       return;
     }
 
@@ -107,7 +107,7 @@ export default function ReceiptsTable({
 
     try {
       const searchParams = new URLSearchParams({
-        orgId,
+        customerId,
         page: String(page),
         pageSize: String(DEFAULT_PAGE_SIZE),
       });
@@ -126,7 +126,7 @@ export default function ReceiptsTable({
       }
 
       const nextPage = {
-        customerId: String(data?.customerId ?? orgId),
+        customerId: String(data?.customerId ?? customerId),
         page: Number(data?.page ?? page),
         pageSize: Number(data?.pageSize ?? DEFAULT_PAGE_SIZE),
         hasMore: Boolean(data?.hasMore),
@@ -135,7 +135,7 @@ export default function ReceiptsTable({
       } satisfies ReceiptPage;
 
       pageCacheRef.current[cacheKey] = nextPage;
-      lastKnownUpdateRef.current[orgId] = nextPage.lastUpdatedAt ?? null;
+      lastKnownUpdateRef.current[customerId] = nextPage.lastUpdatedAt ?? null;
 
       if (activeRequestKeyRef.current === requestKey) {
         setReceiptPage(nextPage);
