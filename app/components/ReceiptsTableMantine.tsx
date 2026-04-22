@@ -29,9 +29,11 @@ const INVALIDATION_POLL_MS = Number(process.env.NEXT_PUBLIC_RECEIPTS_POLL_MS) ||
 export default function ReceiptsTable({
   organizations,
   showOrganizationSelector = true,
+  isSuperAdmin = false,
 }: {
   organizations: Org[];
   showOrganizationSelector?: boolean;
+  isSuperAdmin?: boolean;
 }) {
   const [selectedOrg, setSelectedOrg] = useState<string>(organizations[0]?.id ?? '');
   const [currentPage, setCurrentPage] = useState(1);
@@ -441,7 +443,7 @@ export default function ReceiptsTable({
                 {sortBy === 'userName' && (sortDirection === 'asc' ? <IconSortAscending size={16} style={{marginLeft: 2}} /> : <IconSortDescending size={16} style={{marginLeft: 2}} />)}
               </span>
             </Table.Th>
-            <Table.Th>Texto</Table.Th>
+            {isSuperAdmin && <Table.Th>Texto</Table.Th>}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -519,19 +521,21 @@ export default function ReceiptsTable({
                 </Table.Td>
                 <Table.Td>{receipt.transactionOperationNumber ?? ''}</Table.Td>
                 <Table.Td c="dimmed">{receipt.userName}</Table.Td>
-                <Table.Td>
-                  <Button
-                    size="xs"
-                    variant="light"
-                    leftSection={<IconEye size={14} />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOcrModal(receipt.ocrText ?? 'No hay texto OCR disponible.');
-                    }}
-                  >
-                    Ver OCR
-                  </Button>
-                </Table.Td>
+                {isSuperAdmin && (
+                  <Table.Td>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      leftSection={<IconEye size={14} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOcrModal(receipt.ocrText ?? 'No hay texto OCR disponible.');
+                      }}
+                    >
+                      Ver OCR
+                    </Button>
+                  </Table.Td>
+                )}
               </Table.Tr>
             );
           })}

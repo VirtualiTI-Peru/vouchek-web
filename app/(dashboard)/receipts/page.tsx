@@ -71,6 +71,7 @@ export default async function ReceiptsPage() {
       <ReceiptsTable
         organizations={organizations}
         showOrganizationSelector={ctx.isSuperAdmin}
+        isSuperAdmin={ctx.isSuperAdmin}
       />
     </div>
   );
