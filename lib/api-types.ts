@@ -5,6 +5,7 @@ export type Receipt = {
   receiptId: string;
   customerId?: string;
   createdAt: string;
+  updatedAt?: string;
   isDownloaded: boolean;
   transactionSource?: string;
   transactionAmount?: number;
@@ -14,6 +15,21 @@ export type Receipt = {
   blobUrl?: string;
   ocrText?: string;
   userName?: string;
+};
+
+export type ReceiptSummary = {
+  customerId: string;
+  lastUpdatedAt: string | null;
+};
+
+export type ReceiptPage = {
+  customerId: string;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  lastUpdatedAt: string | null;
+  receipts: Receipt[];
+  totalCount: number;
 };
 
 export type ReceiptsList = {
@@ -29,4 +45,21 @@ export type Customer = {
 
 export type CustomerList = {
   customers: Customer[];
+};
+
+export type SummaryBySource = {
+  transactionSource: string;
+  totalAmount: number;
+};
+
+export type TotalByUser = {
+  transactionSource: string;
+  userId: string;
+  totalAmount: number;
+  fullName: string;
+};
+
+export type ReceiptsSummaryByDate = {
+  summaryBySource: SummaryBySource[];
+  totalsByUser: TotalByUser[];
 };

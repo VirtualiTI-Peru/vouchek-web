@@ -1,7 +1,37 @@
+:root {
+  color-scheme: light;
+}
+
+html[data-mantine-color-scheme='dark'] {
+  --mantine-color-text: #e0e0e0 !important;
+}
+html[data-mantine-color-scheme='dark'] table,
+html[data-mantine-color-scheme='dark'] table th,
+html[data-mantine-color-scheme='dark'] table td,
+html[data-mantine-color-scheme='dark'] .mantine-Table-root,
+html[data-mantine-color-scheme='dark'] .mantine-Table-th,
+html[data-mantine-color-scheme='dark'] .mantine-Table-td {
+  color: var(--mantine-color-text) !important;
+}
+html[data-mantine-color-scheme='dark'] table,
+html[data-mantine-color-scheme='dark'] table th,
+html[data-mantine-color-scheme='dark'] table td,
+html[data-mantine-color-scheme='dark'] .mantine-Table-root,
+html[data-mantine-color-scheme='dark'] .mantine-Table-th,
+html[data-mantine-color-scheme='dark'] .mantine-Table-td {
+  color: #e0e0e0 !important;
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+
 :root {
   color-scheme: light;
+}
+
+html[data-mantine-color-scheme='dark'] table,
+html[data-mantine-color-scheme='dark'] table th,
+html[data-mantine-color-scheme='dark'] table td {
+  color: #e0e0e0 !important;
 }

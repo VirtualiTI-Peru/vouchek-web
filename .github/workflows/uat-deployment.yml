@@ -1,0 +1,25 @@
+# GitHub Actions workflow for deploying Next.js app to Azure App Service
+# Docs: https://docs.microsoft.com/en-us/azure/app-service/deploy-github-actions
+
+name: Deploy to UAT
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'vouchek-uat-web'
+          slot-name: 'production'
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
+          package: .

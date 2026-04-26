@@ -20,6 +20,11 @@
 # production
 /build
 
+# Azure Web App deployment artifacts
+web*.zip
+webapp-logs*/
+webapp-logs*.zip
+
 # misc
 .DS_Store
 *.pem
@@ -31,7 +36,8 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # local env files
-.env*.local
+.env
+.env.*
 
 # vercel
 .vercel
