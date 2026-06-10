@@ -64,6 +64,14 @@ type Invitation = {
   accepted_at: string | null;
 };
 
+type InvitationFilter = 'active' | 'all';
+
+function getInvitationStatus(invitation: Invitation): 'accepted' | 'expired' | 'pending' {
+  if (invitation.accepted_at) return 'accepted';
+  if (new Date(invitation.expires_at).getTime() <= Date.now()) return 'expired';
+  return 'pending';
+}
+
 type Org = { id: string; name: string };
 
 type BulkUserRow = {
@@ -461,7 +469,9 @@ function EditUserModal({
           {member?.email && (
             <div className="space-y-1">
               <Label>Correo electrónico</Label>
-              <Input value={member.email} disabled />
+              <p className="rounded-md border border-default-200 bg-muted/50 px-3 py-2 text-sm font-medium text-foreground">
+                {member.email}
+              </p>
             </div>
           )}
           <div className="space-y-1">
@@ -818,6 +828,7 @@ export default function UsersTable({
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [loadingInvitations, setLoadingInvitations] = useState(false);
+  const [invitationFilter, setInvitationFilter] = useState<InvitationFilter>('active');
   const [resettingUserId, setResettingUserId] = useState('');
   const [deletingUserId, setDeletingUserId] = useState('');
   const [membersMessage, setMembersMessage] = useState('');
@@ -832,6 +843,11 @@ export default function UsersTable({
     open: false,
     member: null,
   });
+  const [revokeModal, setRevokeModal] = useState<{ open: boolean; invitation: Invitation | null }>({
+    open: false,
+    invitation: null,
+  });
+  const [revokingInvitationId, setRevokingInvitationId] = useState('');
 
   const loadMembers = async (orgId: string) => {
     setLoadingMembers(true);
@@ -940,11 +956,42 @@ export default function UsersTable({
     }
   };
 
+  const confirmRevokeInvitation = async () => {
+    const invitation = revokeModal.invitation;
+    if (!invitation) return;
+
+    setRevokingInvitationId(invitation.id);
+    try {
+      const res = await fetch(`/api/invitations?id=${encodeURIComponent(invitation.id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setInvitationMessage(data?.error ?? 'No se pudo revocar la invitación.');
+        return;
+      }
+
+      setInvitationMessage(`Invitación revocada para ${invitation.email}.`);
+      setRevokeModal({ open: false, invitation: null });
+      if (selectedOrg) {
+        await loadInvitations(selectedOrg);
+      }
+    } finally {
+      setRevokingInvitationId('');
+    }
+  };
+
   const filteredMembers = members.filter((member: Member) => {
     if (isSuperAdmin) return true;
     if (member.isSuperAdmin === true) return false;
     if (member.role && member.role.toLowerCase() === 'superadmin') return false;
     return true;
+  });
+
+  const filteredInvitations = invitations.filter((invitation) => {
+    if (invitationFilter === 'all') return true;
+    return getInvitationStatus(invitation) === 'pending';
   });
 
   return (
@@ -1115,6 +1162,22 @@ export default function UsersTable({
         </TabsContent>
 
         <TabsContent value="invitations" className="pt-4">
+          <div className="mb-4 flex items-center justify-end gap-2">
+            <Label className="text-xs text-default-600">Mostrar</Label>
+            <Select
+              value={invitationFilter}
+              onValueChange={(value) => setInvitationFilter(value as InvitationFilter)}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filtrar invitaciones" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Activas</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="rounded-md border border-default-200 bg-card">
             <Table>
               <TableHeader>
@@ -1124,12 +1187,13 @@ export default function UsersTable({
                   <TableHead>Fecha de Creación</TableHead>
                   <TableHead>Expira</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingInvitations ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center">
+                    <TableCell colSpan={6} className="py-8 text-center">
                       <div className="flex items-center justify-center gap-2 text-default-600">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Cargando invitaciones...
@@ -1138,26 +1202,56 @@ export default function UsersTable({
                   </TableRow>
                 ) : invitations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-default-500">
+                    <TableCell colSpan={6} className="py-8 text-center text-default-500">
                       No se encontraron invitaciones.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  invitations.map((invitation) => (
+                  filteredInvitations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-default-500">
+                        No se encontraron invitaciones para el filtro seleccionado.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                  filteredInvitations.map((invitation) => {
+                    const status = getInvitationStatus(invitation);
+                    return (
                     <TableRow key={invitation.id}>
                       <TableCell>{invitation.email}</TableCell>
                       <TableCell>{invitation.role}</TableCell>
                       <TableCell>{new Date(invitation.created_at).toLocaleString()}</TableCell>
                       <TableCell>{new Date(invitation.expires_at).toLocaleString()}</TableCell>
                       <TableCell>
-                        {invitation.accepted_at ? (
+                        {status === 'accepted' ? (
                           <Badge color="success">Aceptada</Badge>
+                        ) : status === 'expired' ? (
+                          <Badge color="secondary">Expirada</Badge>
                         ) : (
                           <Badge color="warning">Pendiente</Badge>
                         )}
                       </TableCell>
+                      <TableCell className="text-right">
+                        {status === 'pending' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-amber-700 border-amber-300"
+                            disabled={revokingInvitationId === invitation.id}
+                            onClick={() => setRevokeModal({ open: true, invitation })}
+                          >
+                            {revokingInvitationId === invitation.id && (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            )}
+                            Revocar
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
+                  )
                 )}
               </TableBody>
             </Table>
@@ -1225,6 +1319,33 @@ export default function UsersTable({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={revokeModal.open}
+        onOpenChange={(open) => !open && setRevokeModal({ open: false, invitation: null })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revocar invitación</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se cancelará la invitación pendiente para {revokeModal.invitation?.email}. El enlace dejará de ser válido.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmRevokeInvitation()}
+              disabled={revokingInvitationId === revokeModal.invitation?.id}
+            >
+              {revokingInvitationId === revokeModal.invitation?.id && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Revocar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
