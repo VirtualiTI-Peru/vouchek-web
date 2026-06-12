@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { ReceiptsSummaryByDate } from '@/lib/api-types';
+import { getSourceBackgroundColor, getSourceForegroundColor } from '@/lib/source-colors';
 import { fetchReceiptsSummaryByDate as fetchReceiptsSummaryByDateClient } from '@/lib/webapi-client';
 import { getTimezoneOffsetMinutes } from '@/lib/work-date';
 import { WORK_CUSTOMER_ID_PARAM } from '@/lib/work-org';
@@ -151,18 +152,27 @@ export default function DashboardSummary({
       <div>
         <h3 className="text-lg font-semibold mb-4 text-default-900">Resumen por origen</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {summaryData?.summaryBySource.map((item) => (
+          {summaryData?.summaryBySource.map((item) => {
+            const bg = getSourceBackgroundColor(item.transactionSource);
+            const fg = getSourceForegroundColor(item.transactionSource);
+            return (
             <Card
               key={item.transactionSource}
-              className="cursor-pointer hover:shadow-md transition-shadow border-default-200"
+              className="cursor-pointer hover:shadow-md transition-shadow border-transparent"
+              style={{ backgroundColor: bg }}
               onClick={() => openReceiptsView({ transactionSource: item.transactionSource })}
             >
               <CardContent className="p-5">
-                <p className="text-xs font-semibold uppercase text-default-500">{item.transactionSource}</p>
-                <p className="text-2xl font-bold mt-2 text-default-900">{formatCurrency(item.totalAmount)}</p>
+                <p className="text-xs font-semibold uppercase" style={{ color: fg, opacity: 0.9 }}>
+                  {item.transactionSource}
+                </p>
+                <p className="text-2xl font-bold mt-2" style={{ color: fg }}>
+                  {formatCurrency(item.totalAmount)}
+                </p>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
           {!summaryData?.summaryBySource.length && (
             <p className="text-default-500 col-span-full">Sin datos para la fecha seleccionada.</p>
           )}
