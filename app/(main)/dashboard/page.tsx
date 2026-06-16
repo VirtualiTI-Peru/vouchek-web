@@ -1,10 +1,13 @@
 import DashboardSummary from '@/app/components/DashboardSummary';
+import OrganizationUsageWidget from '@/app/components/OrganizationUsageWidget';
 import { getPortalContext } from '@/lib/portalContext';
-import { canAccessOrgReports, isOwnReceiptsOnly } from '@/lib/portal-access';
+import { canAccessOrgReports, canViewOrgPlanUsage, isOwnReceiptsOnly } from '@/lib/portal-access';
 import { loadPortalOrganizations } from '@/lib/portal-organizations';
 import { fetchReceiptsSummaryByDate } from '@/lib/webapi';
 import type { ReceiptsSummaryByDate } from '@/lib/api-types';
 import { resolveWorkCustomerId } from '@/lib/work-org';
+import { createClient } from '@supabase/supabase-js';
+import { getOrganizationUsage, type OrganizationUsage } from '@/lib/organization-limits';
 
 function getTodayLocalDateString(): string {
   const now = new Date();
@@ -38,6 +41,8 @@ export default async function DashboardPage({
   const customerId = resolveWorkCustomerId(params?.customerId, organizations, defaultCustomerId);
 
   let data: ReceiptsSummaryByDate | null = null;
+  let usage: OrganizationUsage | null = null;
+
   if (customerId) {
     try {
       data = await fetchReceiptsSummaryByDate(
@@ -48,11 +53,24 @@ export default async function DashboardPage({
     } catch {
       // empty state; client will retry
     }
+
+    if (canViewOrgPlanUsage(ctx)) {
+      try {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        );
+        usage = await getOrganizationUsage(supabaseAdmin, customerId);
+      } catch {
+        usage = null;
+      }
+    }
   }
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-default-900">Resumen</h1>
+      {usage ? <OrganizationUsageWidget usage={usage} /> : null}
       <DashboardSummary
         customerId={customerId}
         data={data}

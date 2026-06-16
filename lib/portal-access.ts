@@ -29,3 +29,13 @@ export function isOwnReceiptsOnly(ctx: PortalContext | null | undefined): boolea
 export function canManageUsers(ctx: PortalContext): boolean {
   return ctx.isSuperAdmin || ctx.role === 'org:admin' || ctx.role === 'org:sistema';
 }
+
+export function canViewOrgPlanUsage(ctx: PortalContext | null | undefined): boolean {
+  if (!ctx) return false;
+  return (
+    ctx.isSuperAdmin ||
+    ctx.role === 'org:admin' ||
+    ctx.role === 'org:sistema' ||
+    ctx.role === 'org:verificador'
+  );
+}

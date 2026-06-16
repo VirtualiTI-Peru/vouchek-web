@@ -44,6 +44,9 @@ export const ApiErrors = {
   PASSWORD_RESET_EMAIL: 'No se pudo enviar el correo para restablecer la contraseña',
   SUPERADMIN_CREATE_ORGS: 'Solo el superadmin puede crear empresas',
   SUPERADMIN_UPDATE_STATUS: 'Solo el superadmin puede actualizar el estado',
+  USER_LIMIT_REACHED: 'Se alcanzó el límite de usuarios del plan contratado',
+  ORG_INACTIVE: 'La empresa está inactiva',
+  SUBSCRIPTION_EXPIRED: 'La suscripción de la empresa ha vencido',
   NO_AUTH_USER: 'No se encontró un usuario autenticado',
   SERVER_CONFIG: 'Configuración del servidor incompleta',
 } as const;

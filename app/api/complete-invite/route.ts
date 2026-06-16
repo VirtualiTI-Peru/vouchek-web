@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { isSupabaseDuplicateUserMessage, mapSupabaseError } from '@/lib/auth-errors';
 import { sendWelcomeEmail } from '@/lib/sendInviteEmail';
+import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
+import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
 import { createHash } from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -38,6 +40,14 @@ export async function POST(req: NextRequest) {
     }
     if (new Date(invitation.expires_at).getTime() <= Date.now()) {
       return NextResponse.json({ error: 'Esta invitacion ya expiro.' }, { status: 410 });
+    }
+
+    try {
+      await assertCanAddOrganizationUser(supabaseAdmin, invitation.org_id, 1);
+    } catch (limitError) {
+      const response = organizationLimitErrorResponse(limitError);
+      if (response) return response;
+      throw limitError;
     }
 
     const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({

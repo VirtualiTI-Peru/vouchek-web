@@ -1,8 +1,16 @@
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
+import {
+  ORG_PLAN_SELECT,
+  getOrganizationUsage,
+  syncCustomerLimitsToAzure,
+  type OrganizationPlanRow,
+} from '@/lib/organization-limits';
+import { getPlanDefinition, isPlanTier, resolvePlanLimits, type PlanTier } from '@/lib/plans';
 
 async function getAuthContext(req: NextRequest) {
   const supabase = createServerClient(
@@ -15,16 +23,23 @@ async function getAuthContext(req: NextRequest) {
         },
         setAll() {},
       },
-    }
+    },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!user) return { user: null, isSuperAdmin: false, role: '', accessToken: null as string | null };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!user) {
+    return { user: null, isSuperAdmin: false, role: '', accessToken: null as string | null };
+  }
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
   const { data: profile } = await supabaseAdmin
@@ -41,35 +56,31 @@ async function getAuthContext(req: NextRequest) {
   };
 }
 
-async function createStorageCustomer(
-  organizationId: string,
-  organizationName: string,
-  isActive: boolean,
-  accessToken: string,
-) {
-  const apiBaseUrl = process.env.API_BASE_URL;
-  if (!apiBaseUrl) {
-    throw new Error('Missing API_BASE_URL');
-  }
-
-  const res = await fetch(`${apiBaseUrl}/api/customers`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      customerId: organizationId,
-      customerName: organizationName,
-      isActive,
-    }),
+function buildPlanInsert(planTier: PlanTier, body: Record<string, unknown>) {
+  const plan = getPlanDefinition(planTier);
+  const resolved = resolvePlanLimits(planTier, {
+    maxUsers: body.maxUsers != null ? Number(body.maxUsers) : undefined,
+    maxReceiptsPerMonth: body.maxReceiptsPerMonth != null ? Number(body.maxReceiptsPerMonth) : undefined,
+    monthlyFeePen: body.monthlyFeePen != null ? Number(body.monthlyFeePen) : undefined,
   });
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    const message = typeof data === 'string' ? data : data?.error ?? data?.title;
-    throw new Error(message || 'No se pudo registrar el cliente en almacenamiento');
-  }
+  return {
+    plan_tier: planTier,
+    max_users: resolved.maxUsers,
+    max_receipts_per_month: resolved.maxReceiptsPerMonth,
+    extra_users: body.extraUsers != null ? Number(body.extraUsers) : 0,
+    extra_receipts: body.extraReceipts != null ? Number(body.extraReceipts) : 0,
+    allow_receipt_overage: body.allowReceiptOverage === true,
+    overage_fee_per_receipt: body.overageFeePerReceipt != null ? Number(body.overageFeePerReceipt) : 0.07,
+    monthly_fee_pen: resolved.monthlyFeePen,
+    billing_cycle: String(body.billingCycle ?? 'monthly'),
+    subscription_starts_at: body.subscriptionStartsAt
+      ? new Date(String(body.subscriptionStartsAt)).toISOString()
+      : new Date().toISOString(),
+    subscription_ends_at: body.subscriptionEndsAt
+      ? new Date(String(body.subscriptionEndsAt)).toISOString()
+      : null,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -84,21 +95,41 @@ export async function GET(req: NextRequest) {
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
+
+    const includeUsage = req.nextUrl.searchParams.get('includeUsage') === 'true';
 
     const { data, error } = await supabaseAdmin
       .from('organizations')
-      .select('id, name, code, ruc, is_active, created_at')
+      .select(ORG_PLAN_SELECT)
       .order('name', { ascending: true });
 
     if (error) {
       return NextResponse.json({ error: error.message || 'No se pudieron cargar las empresas' }, { status: 500 });
     }
 
-    return NextResponse.json(data ?? []);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || ApiErrors.UNKNOWN }, { status: 500 });
+    const organizations = (data ?? []) as OrganizationPlanRow[];
+
+    if (!includeUsage || organizations.length === 0) {
+      return NextResponse.json(organizations);
+    }
+
+    const withUsage = await Promise.all(
+      organizations.map(async (org) => {
+        try {
+          const usage = await getOrganizationUsage(supabaseAdmin, org.id);
+          return { ...org, usage };
+        } catch {
+          return { ...org, usage: null };
+        }
+      }),
+    );
+
+    return NextResponse.json(withUsage);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -120,6 +151,8 @@ export async function POST(req: NextRequest) {
     const code = String(body?.code ?? '').trim();
     const ruc = String(body?.ruc ?? '').trim();
     const isActive = body?.isActive === false ? false : true;
+    const planTierRaw = String(body?.planTier ?? 'esencial');
+    const planTier: PlanTier = isPlanTier(planTierRaw) ? planTierRaw : 'esencial';
 
     if (!name || !code) {
       return NextResponse.json({ error: ApiErrors.MISSING_NAME_OR_CODE }, { status: 400 });
@@ -127,8 +160,10 @@ export async function POST(req: NextRequest) {
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
+
+    const planFields = buildPlanInsert(planTier, body);
 
     const { data, error } = await supabaseAdmin
       .from('organizations')
@@ -137,8 +172,9 @@ export async function POST(req: NextRequest) {
         code,
         ruc: ruc || null,
         is_active: isActive,
+        ...planFields,
       })
-      .select('id, name, code, ruc, is_active, created_at')
+      .select(ORG_PLAN_SELECT)
       .single();
 
     if (error) {
@@ -150,24 +186,26 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await createStorageCustomer(data.id, name, isActive, accessToken);
+      await syncCustomerLimitsToAzure(data as OrganizationPlanRow, accessToken);
     } catch (storageError: unknown) {
       await supabaseAdmin.from('organizations').delete().eq('id', data.id);
-      const message = storageError instanceof Error
-        ? storageError.message
-        : 'No se pudo registrar el cliente en almacenamiento';
+      const message =
+        storageError instanceof Error
+          ? storageError.message
+          : 'No se pudo registrar el cliente en almacenamiento';
       return NextResponse.json({ error: message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, organization: data });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || ApiErrors.UNKNOWN }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { user, isSuperAdmin } = await getAuthContext(req);
+    const { user, isSuperAdmin, accessToken } = await getAuthContext(req);
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
@@ -177,30 +215,70 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json();
     const id = String(body?.id ?? '').trim();
-    const isActive = Boolean(body?.isActive);
-
     if (!id) {
       return NextResponse.json({ error: 'Falta el id de la empresa' }, { status: 400 });
     }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
+
+    const updates: Record<string, unknown> = {};
+
+    if (body.isActive != null) {
+      updates.is_active = Boolean(body.isActive);
+    }
+
+    if (body.planTier != null) {
+      const planTierRaw = String(body.planTier);
+      if (!isPlanTier(planTierRaw)) {
+        return NextResponse.json({ error: 'Plan inválido' }, { status: 400 });
+      }
+      Object.assign(updates, buildPlanInsert(planTierRaw, body));
+    } else {
+      if (body.maxUsers != null) updates.max_users = Number(body.maxUsers);
+      if (body.maxReceiptsPerMonth != null) updates.max_receipts_per_month = Number(body.maxReceiptsPerMonth);
+      if (body.extraUsers != null) updates.extra_users = Number(body.extraUsers);
+      if (body.extraReceipts != null) updates.extra_receipts = Number(body.extraReceipts);
+      if (body.allowReceiptOverage != null) updates.allow_receipt_overage = Boolean(body.allowReceiptOverage);
+      if (body.monthlyFeePen != null) updates.monthly_fee_pen = Number(body.monthlyFeePen);
+      if (body.subscriptionEndsAt !== undefined) {
+        updates.subscription_ends_at = body.subscriptionEndsAt
+          ? new Date(String(body.subscriptionEndsAt)).toISOString()
+          : null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No hay cambios para aplicar' }, { status: 400 });
+    }
 
     const { data, error } = await supabaseAdmin
       .from('organizations')
-      .update({ is_active: isActive })
+      .update(updates)
       .eq('id', id)
-      .select('id, name, code, ruc, is_active, created_at')
+      .select(ORG_PLAN_SELECT)
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message || 'No se pudo actualizar el estado de la empresa' }, { status: 500 });
+      return NextResponse.json(
+        { error: error.message || 'No se pudo actualizar la empresa' },
+        { status: 500 },
+      );
+    }
+
+    if (accessToken) {
+      try {
+        await syncCustomerLimitsToAzure(data as OrganizationPlanRow, accessToken);
+      } catch (syncError) {
+        console.error('Azure sync after org update failed:', syncError);
+      }
     }
 
     return NextResponse.json({ success: true, organization: data });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || ApiErrors.UNKNOWN }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

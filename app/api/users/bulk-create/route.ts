@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { mapSupabaseError } from '@/lib/auth-errors';
 import { sendWelcomeEmail } from '@/lib/sendInviteEmail';
+import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
+import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
 
 type BulkUserInput = {
   email: string;
@@ -137,6 +139,27 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+
+    const prospectiveEmails = new Set<string>();
+    let prospectiveCreates = 0;
+    for (const item of users) {
+      const email = String(item?.email ?? '').trim().toLowerCase();
+      const firstName = String(item?.firstName ?? '').trim();
+      const lastName = String(item?.lastName ?? '').trim();
+      if (!email || !firstName || !lastName || prospectiveEmails.has(email)) continue;
+      prospectiveEmails.add(email);
+      prospectiveCreates += 1;
+    }
+
+    if (prospectiveCreates > 0) {
+      try {
+        await assertCanAddOrganizationUser(supabaseAdmin, orgId, prospectiveCreates);
+      } catch (limitError) {
+        const response = organizationLimitErrorResponse(limitError);
+        if (response) return response;
+        throw limitError;
+      }
+    }
 
     const recoveryBaseUrl = process.env.INVITE_BASE_URL || req.nextUrl.origin;
     const loginLink = `${recoveryBaseUrl}/sign-in`;

@@ -2,31 +2,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import CustomersTable from '@/app/components/CustomersTable';
+import CustomersTable, { type OrganizationWithUsage } from '@/app/components/CustomersTable';
 import { createBrowserClient } from '@supabase/ssr';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
-
-type Organization = {
-  id: string;
-  name: string;
-  code: string;
-  ruc: string | null;
-  is_active: boolean;
-  created_at?: string;
-};
+import { PLAN_TIER_OPTIONS, type PlanTier } from '@/lib/plans';
 
 export default function SuperAdminPage() {
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationWithUsage[]>([]);
   const [loading, setLoading] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [ruc, setRuc] = useState('');
+  const [planTier, setPlanTier] = useState<PlanTier>('esencial');
   const [isActive, setIsActive] = useState(true);
 
   const superAdmins = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '')
@@ -49,7 +42,7 @@ export default function SuperAdminPage() {
   const loadOrganizations = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/superadmin/organizations', { cache: 'no-store' });
+      const res = await fetch('/api/superadmin/organizations?includeUsage=true', { cache: 'no-store' });
       const data = await res.json().catch(() => []);
       if (!res.ok) {
         setOrganizations([]);
@@ -82,6 +75,7 @@ export default function SuperAdminPage() {
           code: code.trim(),
           ruc: ruc.trim(),
           isActive,
+          planTier,
         }),
       });
 
@@ -94,6 +88,7 @@ export default function SuperAdminPage() {
       setName('');
       setCode('');
       setRuc('');
+      setPlanTier('esencial');
       setIsActive(true);
       await loadOrganizations();
     } finally {
@@ -101,7 +96,7 @@ export default function SuperAdminPage() {
     }
   };
 
-  const handleToggleStatus = async (organization: Organization, nextActive: boolean) => {
+  const handleToggleStatus = async (organization: OrganizationWithUsage, nextActive: boolean) => {
     const actionLabel = nextActive ? 'activar' : 'inactivar';
     if (!confirm(`¿Deseas ${actionLabel} el cliente ${organization.name}?`)) {
       return;
@@ -121,6 +116,28 @@ export default function SuperAdminPage() {
     await loadOrganizations();
   };
 
+  const handlePlanChange = async (organization: OrganizationWithUsage, nextPlan: PlanTier) => {
+    if (nextPlan === organization.plan_tier) return;
+
+    const label = PLAN_TIER_OPTIONS.find((p) => p.value === nextPlan)?.label ?? nextPlan;
+    if (!confirm(`¿Cambiar el plan de ${organization.name} a ${label}?`)) {
+      return;
+    }
+
+    const res = await fetch('/api/superadmin/organizations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: organization.id, planTier: nextPlan }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? 'No se pudo actualizar el plan.');
+      return;
+    }
+
+    await loadOrganizations();
+  };
+
   if (!isSuperAdmin) {
     return <div className="text-default-600">Acceso denegado.</div>;
   }
@@ -131,7 +148,7 @@ export default function SuperAdminPage() {
       <Card className="border-default-200">
         <CardContent className="space-y-6 pt-6">
           <form onSubmit={handleCreateOrganization} className="space-y-4 p-4 rounded-lg bg-default-50 border border-default-200">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Nombre</Label>
                 <Input id="name" placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)} disabled={creating} required />
@@ -143,6 +160,22 @@ export default function SuperAdminPage() {
               <div className="space-y-2">
                 <Label htmlFor="ruc">RUC</Label>
                 <Input id="ruc" placeholder="RUC" value={ruc} onChange={(e) => setRuc(e.target.value)} disabled={creating} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan">Plan</Label>
+                <select
+                  id="plan"
+                  className="flex h-10 w-full rounded-md border border-default-200 bg-white px-3 text-sm dark:bg-card"
+                  value={planTier}
+                  onChange={(e) => setPlanTier(e.target.value as PlanTier)}
+                  disabled={creating}
+                >
+                  {PLAN_TIER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -166,6 +199,7 @@ export default function SuperAdminPage() {
               organizations={organizations}
               canManage={isSuperAdmin}
               onToggleStatus={handleToggleStatus}
+              onPlanChange={handlePlanChange}
             />
           )}
         </CardContent>

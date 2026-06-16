@@ -4,6 +4,8 @@ import { createServerClient } from "@supabase/ssr";
 import { ApiErrors } from "@/lib/api-errors";
 import { mapSupabaseError } from "@/lib/auth-errors";
 import { sendInviteEmail } from "@/lib/sendInviteEmail";
+import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
+import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
 import { createHash, randomBytes } from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -49,6 +51,14 @@ export async function POST(req: NextRequest) {
 
     if (existingInvite?.id) {
       return NextResponse.json({ error: "Ya existe una invitacion pendiente para este usuario." }, { status: 409 });
+    }
+
+    try {
+      await assertCanAddOrganizationUser(supabaseAdmin, String(orgId), 1);
+    } catch (limitError) {
+      const response = organizationLimitErrorResponse(limitError);
+      if (response) return response;
+      throw limitError;
     }
 
     const rawToken = randomBytes(32).toString("hex");

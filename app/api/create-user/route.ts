@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { isSupabaseDuplicateUserMessage, mapSupabaseError } from '@/lib/auth-errors';
 import { sendWelcomeEmail } from '@/lib/sendInviteEmail';
+import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
+import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
 
 const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
@@ -92,6 +94,14 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+
+    try {
+      await assertCanAddOrganizationUser(supabaseAdmin, String(orgId), 1);
+    } catch (limitError) {
+      const response = organizationLimitErrorResponse(limitError);
+      if (response) return response;
+      throw limitError;
+    }
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email: normalizedEmail,
