@@ -5,9 +5,13 @@ import { isSupabaseDuplicateUserMessage, mapSupabaseError } from '@/lib/auth-err
 import { sendWelcomeEmail } from '@/lib/sendInviteEmail';
 import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
 import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { createHash } from 'crypto';
 
 export async function POST(req: NextRequest) {
+  const rateLimited = enforceRateLimit(req, 'complete-invite', 10, 15 * 60 * 1000);
+  if (rateLimited) return rateLimited;
+
   try {
     const { token, firstName, lastName, password } = await req.json();
     if (!token || !firstName || !lastName || !password) {
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     if (createError || !created?.user) {
       if (createError && isSupabaseDuplicateUserMessage(createError.message)) {
-        return NextResponse.json({ error: 'El usuario ya existe. Solicita acceso a un administrador.' }, { status: 409 });
+        return NextResponse.json({ error: 'No se pudo completar el registro. Solicita acceso a un administrador.' }, { status: 409 });
       }
       return NextResponse.json({ error: mapSupabaseError(createError?.message ?? '') || ApiErrors.CREATE_USER }, { status: 500 });
     }

@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { ApiErrors } from "@/lib/api-errors";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = enforceRateLimit(req, 'invitations-resolve', 30, 60 * 1000);
+  if (rateLimited) return rateLimited;
+
   try {
     const token = req.nextUrl.searchParams.get("token");
     if (!token) {
@@ -39,11 +43,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      id: invitation.id,
       email: invitation.email,
-      role: invitation.role,
-      orgId: invitation.org_id,
-      expiresAt: invitation.expires_at,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || ApiErrors.VALIDATE_INVITATION }, { status: 500 });

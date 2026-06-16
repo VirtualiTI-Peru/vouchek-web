@@ -1,34 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
 import { ApiErrors } from "@/lib/api-errors";
 import { mapSupabaseError } from "@/lib/auth-errors";
 import { sendInviteEmail } from "@/lib/sendInviteEmail";
 import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
 import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
+import { canAccessOrganization, getApiAuthContext, isUuid } from '@/lib/api-auth-context';
+import { canManageUsers } from '@/lib/portal-access';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { createHash, randomBytes } from "crypto";
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimited = enforceRateLimit(req, 'invite', 20, 15 * 60 * 1000);
+    if (rateLimited) return rateLimited;
+
     const { email, orgId, role } = await req.json();
     if (!email || !orgId || !role) {
       return NextResponse.json({ error: ApiErrors.MISSING_EMAIL_ORG_ROLE }, { status: 400 });
     }
 
-    // Verify caller is authenticated
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return req.cookies.getAll(); },
-          setAll() {},
-        },
-      }
-    );
-    const { data: { user: caller } } = await supabase.auth.getUser();
+    const normalizedOrgId = String(orgId).trim();
+    if (!isUuid(normalizedOrgId)) {
+      return NextResponse.json({ error: 'Identificador de empresa inválido.' }, { status: 400 });
+    }
+
+    const { user: caller, isSuperAdmin, role: callerRole, orgId: callerOrgId } = await getApiAuthContext(req);
     if (!caller) {
       return NextResponse.json({ error: ApiErrors.NO_AUTH_USER }, { status: 401 });
+    }
+
+    if (!canManageUsers({ userId: caller.id, orgId: callerOrgId, role: callerRole, isSuperAdmin })) {
+      return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
+    }
+
+    if (!canAccessOrganization(isSuperAdmin, callerOrgId, normalizedOrgId)) {
+      return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
     const supabaseAdmin = createClient(
@@ -42,7 +49,7 @@ export async function POST(req: NextRequest) {
     const { data: existingInvite } = await supabaseAdmin
       .from("invitations")
       .select("id")
-      .eq("org_id", orgId)
+      .eq("org_id", normalizedOrgId)
       .eq("email", normalizedEmail)
       .is("accepted_at", null)
       .gt("expires_at", new Date().toISOString())
@@ -54,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await assertCanAddOrganizationUser(supabaseAdmin, String(orgId), 1);
+      await assertCanAddOrganizationUser(supabaseAdmin, normalizedOrgId, 1);
     } catch (limitError) {
       const response = organizationLimitErrorResponse(limitError);
       if (response) return response;
@@ -68,7 +75,7 @@ export async function POST(req: NextRequest) {
     const { error: invitationError } = await supabaseAdmin
       .from("invitations")
       .insert({
-        org_id: orgId,
+        org_id: normalizedOrgId,
         email: normalizedEmail,
         role,
         token_hash: tokenHash,
@@ -86,11 +93,11 @@ export async function POST(req: NextRequest) {
 
     // Look up org name and caller profile for the email
     const [{ data: org }, { data: callerProfile }] = await Promise.all([
-      supabaseAdmin.from('organizations').select('name').eq('id', orgId).single(),
+      supabaseAdmin.from('organizations').select('name').eq('id', normalizedOrgId).single(),
       supabaseAdmin.from('profiles').select('first_name, last_name').eq('user_id', caller.id).single(),
     ]);
 
-    const orgName = org?.name ?? orgId;
+    const orgName = org?.name ?? normalizedOrgId;
     const invitedBy = [callerProfile?.first_name, callerProfile?.last_name].filter(Boolean).join(' ') || caller.email!;
 
     // Send custom invite email via Resend

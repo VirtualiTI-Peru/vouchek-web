@@ -50,6 +50,8 @@ type LoadReceiptsOptions = {
 const DEFAULT_PAGE_SIZE = Number(process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE) || 50;
 const INVALIDATION_POLL_MS = Number(process.env.NEXT_PUBLIC_RECEIPTS_POLL_MS) || 15000;
 
+const LIMA_TIMEZONE = 'America/Lima';
+
 const formatCurrencyPen = (amount?: number | null) => {
   if (typeof amount !== 'number' || Number.isNaN(amount)) {
     return '';
@@ -60,6 +62,96 @@ const formatCurrencyPen = (amount?: number | null) => {
     currency: 'PEN',
   }).format(amount);
 };
+
+const formatDateLima = (iso?: string | null) => {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('es-PE', { timeZone: LIMA_TIMEZONE });
+};
+
+function buildExportHeaders(includeUserColumn: boolean): string[] {
+  const headers = [
+    'ID Voucher',
+    'Imagen',
+    'Fecha de Captura',
+    'Origen',
+    'Importe',
+    'Fecha Operación',
+    'Nº Operación',
+    'Pagado a',
+  ];
+  if (includeUserColumn) {
+    headers.push('Usuario');
+  }
+  headers.push('Duplicado');
+  return headers;
+}
+
+function receiptToExportRow(receipt: Receipt, includeUserColumn: boolean): (string | number)[] {
+  const row: (string | number)[] = [
+    receipt.receiptId,
+    receipt.isDownloaded ? 'Descargada' : 'Disponible',
+    formatDateLima(receipt.createdAt),
+    receipt.transactionSource ?? '',
+    typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : '',
+    formatDateLima(receipt.transactionDateTimeUtc),
+    receipt.transactionOperationNumber ?? '',
+    receipt.payeeName ?? '',
+  ];
+  if (includeUserColumn) {
+    row.push(receipt.userName ?? '');
+  }
+  row.push(receipt.parentReceiptId ? 'Sí' : 'No');
+  return row;
+}
+
+function buildStyledExcelWorkbook(
+  headers: string[],
+  rows: (string | number)[][],
+  meta: { selectedDate: string; recordCount: number },
+) {
+  const importeColumnIndex = 4;
+  const metaRows: (string | number)[][] = [
+    ['Reporte de Vouchers — VouChek'],
+    [`Generado: ${formatDateLima(new Date().toISOString())}`],
+    [`Fecha consultada: ${meta.selectedDate}`],
+    [`Total de registros: ${meta.recordCount}`],
+    [],
+  ];
+  const sheetData = [...metaRows, headers, ...rows];
+  const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+  const headerRowIndex = metaRows.length;
+  const importeColumnLetter = XLSX.utils.encode_col(importeColumnIndex);
+
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(headers.length - 1, 0) } },
+  ];
+  worksheet['!cols'] = headers.map((header, index) => {
+    if (index === importeColumnIndex) return { wch: 14 };
+    if (header === 'ID Voucher') return { wch: 38 };
+    if (header === 'Fecha de Captura' || header === 'Fecha Operación') return { wch: 22 };
+    if (header === 'Pagado a' || header === 'Usuario') return { wch: 28 };
+    return { wch: Math.min(Math.max(header.length + 4, 12), 32) };
+  });
+  worksheet['!freeze'] = { xSplit: 0, ySplit: headerRowIndex + 1, topLeftCell: 'A1', activePane: 'bottomLeft' };
+  worksheet['!autofilter'] = {
+    ref: XLSX.utils.encode_range({
+      s: { r: headerRowIndex, c: 0 },
+      e: { r: headerRowIndex + rows.length, c: headers.length - 1 },
+    }),
+  };
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const cellAddress = `${importeColumnLetter}${headerRowIndex + 2 + rowIndex}`;
+    const value = rows[rowIndex][importeColumnIndex];
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      worksheet[cellAddress] = { t: 'n', v: value, z: '"S/ "#,##0.00' };
+    }
+  }
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Vouchers');
+  return workbook;
+}
 
 function getVisiblePages(current: number, total: number): number[] {
   if (total <= 7) {
@@ -433,6 +525,7 @@ export default function ReceiptsTable({
         r.userName?.toLowerCase().includes(q) ||
         r.transactionSource?.toLowerCase().includes(q) ||
         r.transactionOperationNumber?.toLowerCase().includes(q) ||
+        r.payeeName?.toLowerCase().includes(q) ||
         (r.transactionAmount && String(r.transactionAmount).toLowerCase().includes(q)) ||
         (r.createdAt && new Date(r.createdAt).toLocaleString().toLowerCase().includes(q)) ||
         (r.transactionDateTimeUtc &&
@@ -452,6 +545,7 @@ export default function ReceiptsTable({
       new Date(b.transactionDateTimeUtc || 0).getTime(),
     transactionOperationNumber: (a, b) =>
       (a.transactionOperationNumber || '').localeCompare(b.transactionOperationNumber || ''),
+    payeeName: (a, b) => (a.payeeName || '').localeCompare(b.payeeName || ''),
     userName: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
   };
   const sortedReceipts = [...filteredReceipts];
@@ -466,7 +560,9 @@ export default function ReceiptsTable({
 
   async function buildExportData(): Promise<{
     headers: string[];
-    rows: (string | number)[][];
+    sortedReceipts: Receipt[];
+    includeUserColumn: boolean;
+    recordCount: number;
   } | null> {
     if (!selectedOrg) return null;
     let allReceipts: Receipt[] = [];
@@ -483,13 +579,16 @@ export default function ReceiptsTable({
     }
 
     const q = userFilter.trim().toLowerCase();
-    let filtered = allReceipts.filter((r) => !r.parentReceiptId);
+    let filtered = showDuplicates
+      ? allReceipts
+      : allReceipts.filter((r) => !r.parentReceiptId);
     if (q) {
       filtered = filtered.filter(
         (r) =>
           r.userName?.toLowerCase().includes(q) ||
           r.transactionSource?.toLowerCase().includes(q) ||
           r.transactionOperationNumber?.toLowerCase().includes(q) ||
+          r.payeeName?.toLowerCase().includes(q) ||
           (r.transactionAmount && String(r.transactionAmount).toLowerCase().includes(q)) ||
           (r.createdAt && new Date(r.createdAt).toLocaleString().toLowerCase().includes(q)) ||
           (r.transactionDateTimeUtc &&
@@ -508,6 +607,7 @@ export default function ReceiptsTable({
         new Date(b.transactionDateTimeUtc || 0).getTime(),
       transactionOperationNumber: (a, b) =>
         (a.transactionOperationNumber || '').localeCompare(b.transactionOperationNumber || ''),
+      payeeName: (a, b) => (a.payeeName || '').localeCompare(b.payeeName || ''),
       userName: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
     };
     const sorted = [...filtered];
@@ -516,24 +616,15 @@ export default function ReceiptsTable({
       if (sortDirection === 'desc') sorted.reverse();
     }
 
-    const headers = [
-      'Fecha de Captura',
-      'Origen',
-      'Importe',
-      'Fecha Operación',
-      'Nº Operación',
-      'Usuario',
-    ];
-    const rows = sorted.map((r) => [
-      r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
-      r.transactionSource ?? '',
-      r.transactionAmount ?? '',
-      r.transactionDateTimeUtc ? new Date(r.transactionDateTimeUtc).toLocaleString() : '',
-      r.transactionOperationNumber ?? '',
-      r.userName ?? '',
-    ]);
+    const includeUserColumn = !ownReceiptsOnly;
+    const headers = buildExportHeaders(includeUserColumn);
 
-    return { headers, rows };
+    return {
+      headers,
+      sortedReceipts: sorted,
+      includeUserColumn,
+      recordCount: sorted.length,
+    };
   }
 
   async function exportToExcel() {
@@ -543,11 +634,16 @@ export default function ReceiptsTable({
       return;
     }
 
-    const { headers, rows } = exportData;
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Vouchers');
-    XLSX.writeFile(workbook, 'vouchers.xlsx');
+    const { headers, sortedReceipts, includeUserColumn, recordCount } = exportData;
+    const rowsForExcel = sortedReceipts.map((receipt) =>
+      receiptToExportRow(receipt, includeUserColumn),
+    );
+
+    const workbook = buildStyledExcelWorkbook(headers, rowsForExcel, {
+      selectedDate,
+      recordCount,
+    });
+    XLSX.writeFile(workbook, `vouchers_${selectedDate}.xlsx`);
   }
 
   async function exportToPdf() {
@@ -557,16 +653,30 @@ export default function ReceiptsTable({
       return;
     }
 
-    const { headers, rows } = exportData;
+    const { headers, sortedReceipts, includeUserColumn, recordCount } = exportData;
+    const rows = sortedReceipts.map((receipt) => {
+      const row = receiptToExportRow(receipt, includeUserColumn);
+      row[4] = formatCurrencyPen(
+        typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : null,
+      );
+      return row;
+    });
     const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(14);
+    doc.text('Reporte de Vouchers — VouChek', 14, 14);
+    doc.setFontSize(9);
+    doc.text(`Generado: ${formatDateLima(new Date().toISOString())}`, 14, 21);
+    doc.text(`Fecha consultada: ${selectedDate} · ${recordCount} registro(s)`, 14, 27);
     autoTable(doc, {
       head: [headers],
       body: rows,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [39, 110, 241] },
-      margin: { top: 16, right: 10, bottom: 10, left: 10 },
+      startY: 32,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [39, 110, 241], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      margin: { top: 32, right: 10, bottom: 10, left: 10 },
     });
-    doc.save('vouchers.pdf');
+    doc.save(`vouchers_${selectedDate}.pdf`);
   }
 
   const paginationLabel = (() => {
@@ -586,7 +696,7 @@ export default function ReceiptsTable({
             id="receipts-search"
             value={userFilter}
             onChange={(e) => setUserFilter(e.target.value)}
-            placeholder="Buscar por usuario, origen, importe, fecha, operación..."
+            placeholder="Buscar por usuario, origen, pagado a, importe, fecha, operación..."
           />
         </div>
 

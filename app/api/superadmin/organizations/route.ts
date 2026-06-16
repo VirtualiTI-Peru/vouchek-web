@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
-    if (!isSuperAdmin && role !== 'org:admin' && role !== 'org:sistema') {
+    if (!isSuperAdmin) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
