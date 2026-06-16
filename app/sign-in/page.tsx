@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { mapSupabaseAuthError } from '@/lib/auth-errors';
 import { loadRememberedEmail, persistRememberedEmail } from '@/lib/remember-email';
+import { VouchekLogo, VouchekMark } from '@/components/vouchek-logo';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -89,9 +90,8 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-dvh w-full items-stretch overflow-hidden bg-default-50">
       <div className="hidden lg:flex flex-1 flex-col justify-start px-20 pt-16 xl:pt-20 pb-12 bg-default-100 dark:bg-default-50">
-        <Link href="/" className="mb-6 inline-flex items-center gap-2">
-          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold">V</div>
-          <span className="text-2xl font-semibold text-default-900">VouChek</span>
+        <Link href="/" className="mb-6 inline-flex items-center">
+          <VouchekLogo width={160} />
         </Link>
         <h2 className="text-4xl text-default-600 leading-tight max-w-lg">
           Digitalización de
@@ -105,7 +105,7 @@ export default function SignInPage() {
       <div className="flex-1 flex flex-col bg-white dark:bg-card">
         <div className="flex-1 flex flex-col justify-center max-w-[480px] w-full mx-auto px-6 py-10">
           <div className="lg:hidden flex justify-center mb-8">
-            <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold">V</div>
+            <VouchekMark size={40} />
           </div>
           <div className="text-center mb-8">
             <h1 className="text-2xl font-semibold text-default-900">Iniciar sesión</h1>

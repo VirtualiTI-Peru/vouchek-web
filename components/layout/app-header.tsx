@@ -12,6 +12,7 @@ import { NavLinks } from './app-sidebar';
 import { WorkDateFilter } from './work-date-filter';
 import { WorkOrgFilter } from './work-org-filter';
 import type { PortalOrganization } from '@/lib/work-org';
+import { VouchekLogo } from '@/components/vouchek-logo';
 
 type AppHeaderProps = {
   user?: {
@@ -54,7 +55,7 @@ export function AppHeader({
             <SheetContent side="left" className="p-0 w-[248px]">
               <SheetTitle className="sr-only">Menú de navegación</SheetTitle>
               <div className="p-4 border-b">
-                <span className="text-lg font-semibold">VouChek</span>
+                <VouchekLogo width={132} />
               </div>
               <div className="p-3">
                 <NavLinks canSeeReports={canSeeReports} canSeeAdmin={canSeeAdmin} canSeeSuper={canSeeSuper} />
@@ -72,7 +73,7 @@ export function AppHeader({
             <Menu className="h-5 w-5" />
           </Button>
 
-          <span className="text-lg font-semibold text-default-900 xl:hidden">VouChek</span>
+          <VouchekLogo width={112} className="xl:hidden" />
           <Suspense fallback={null}>
             <WorkOrgFilter isSuperAdmin={canSeeSuper} organizations={organizations} />
           </Suspense>

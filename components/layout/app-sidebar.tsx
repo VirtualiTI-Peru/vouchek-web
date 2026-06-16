@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { useConfig } from '@/hooks/use-config';
 import { useMenuHoverConfig } from '@/hooks/use-menu-hover';
+import { VouchekLogo, VouchekMark } from '@/components/vouchek-logo';
 
 type NavLinksProps = {
   canSeeReports?: boolean;
@@ -88,13 +89,11 @@ export function AppSidebar({ canSeeReports = false, canSeeAdmin = false, canSeeS
     >
       <div className="flex flex-col h-full py-4">
         <div className={cn('px-4 mb-6', collapsed && 'px-2')}>
-          <Link href={appendWorkDateToHref('/dashboard', searchParams)} className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
-              V
-            </div>
-            {!collapsed && (
-              <span className="text-lg font-semibold text-default-900">VouChek</span>
-            )}
+          <Link
+            href={appendWorkDateToHref('/dashboard', searchParams)}
+            className={cn('flex items-center', collapsed ? 'justify-center' : 'gap-2')}
+          >
+            {collapsed ? <VouchekMark size={28} /> : <VouchekLogo width={132} />}
           </Link>
         </div>
         <ScrollArea className="flex-1 px-3">

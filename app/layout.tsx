@@ -3,8 +3,11 @@ import { ThemeProvider } from '@/providers/theme-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'VouChek',
-  description: 'VouChek - Digitalización de comprobantes de pago',
+  title: 'Vouchek',
+  description: 'Vouchek - Digitalización de comprobantes de pago',
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+  },
 };
 
 export default function RootLayout({
