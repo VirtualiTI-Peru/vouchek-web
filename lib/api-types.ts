@@ -13,7 +13,7 @@ export type Receipt = {
   transactionCurrency?: string;
   transactionOperationNumber?: string;
   transactionDateTimeUtc?: string;
-  blobUrl?: string;
+  hasImage?: boolean;
   ocrText?: string;
   userName?: string;
   payeeName?: string;  

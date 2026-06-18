@@ -896,7 +896,7 @@ export default function ReceiptsTable({
                   onClick={() => setHighlightedRow(receipt.receiptId)}
                 >
                   <TableCell className="normal-case">
-                    {receipt.blobUrl ? (
+                    {receipt.hasImage ? (
                       <img
                         src={`/api/receipt-image/${receipt.userId}/${receipt.receiptId}`}
                         alt="Miniatura del voucher"
