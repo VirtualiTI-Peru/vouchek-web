@@ -21,11 +21,21 @@ export type OrganizationWithUsage = {
   extra_receipts: number;
   allow_receipt_overage: boolean;
   monthly_fee_pen: number | null;
+  demo_enabled: boolean;
+  demo_days: number | null;
+  subscription_ends_at?: string | null;
   usage?: OrganizationUsage | null;
 };
 
 function planLabel(tier: PlanTier) {
   return PLAN_TIER_OPTIONS.find((p) => p.value === tier)?.label ?? tier;
+}
+
+function demoDaysRemaining(endsAt?: string | null): number | null {
+  if (!endsAt) return null;
+  const end = new Date(endsAt).getTime();
+  if (Number.isNaN(end)) return null;
+  return Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
 function usageUsersText(usage?: OrganizationUsage | null) {
@@ -43,11 +53,13 @@ export default function CustomersTable({
   canManage,
   onToggleStatus,
   onPlanChange,
+  onDemoChange,
 }: {
   organizations: OrganizationWithUsage[];
   canManage: boolean;
   onToggleStatus: (org: OrganizationWithUsage, nextActive: boolean) => void;
   onPlanChange: (org: OrganizationWithUsage, planTier: PlanTier) => void;
+  onDemoChange?: (org: OrganizationWithUsage) => void;
 }) {
   return (
     <div className="rounded-md border border-default-200 overflow-hidden">
@@ -60,13 +72,14 @@ export default function CustomersTable({
             <TableHead>Usuarios</TableHead>
             <TableHead>Comprobantes/mes</TableHead>
             <TableHead>Estado</TableHead>
+            <TableHead>Demo</TableHead>
             <TableHead>Acción</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {organizations.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center py-8 text-default-500">
+              <TableCell colSpan={8} className="text-center py-8 text-default-500">
                 No hay clientes.
               </TableCell>
             </TableRow>
@@ -98,6 +111,41 @@ export default function CustomersTable({
                   <Badge color={organization.is_active ? 'success' : 'secondary'}>
                     {organization.is_active ? 'Activo' : 'Inactivo'}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  {(() => {
+                    if (!organization.demo_enabled) {
+                      return canManage && onDemoChange ? (
+                        <Button size="sm" variant="outline" onClick={() => onDemoChange(organization)}>
+                          Activar demo
+                        </Button>
+                      ) : (
+                        <span className="text-default-400">—</span>
+                      );
+                    }
+                    const remaining = demoDaysRemaining(organization.subscription_ends_at);
+                    const expired = remaining !== null && remaining <= 0;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <Badge color={expired ? 'destructive' : 'warning'}>
+                          {expired
+                            ? 'Demo vencido'
+                            : remaining !== null
+                              ? `Demo · ${remaining}d`
+                              : 'Demo'}
+                        </Badge>
+                        {canManage && onDemoChange && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onDemoChange(organization)}
+                          >
+                            Editar
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell>
                   {canManage ? (

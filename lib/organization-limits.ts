@@ -19,6 +19,8 @@ export type OrganizationPlanRow = {
   billing_cycle: string;
   subscription_starts_at: string | null;
   subscription_ends_at: string | null;
+  demo_enabled: boolean;
+  demo_days: number | null;
 };
 
 export type OrganizationUsage = {
@@ -37,6 +39,10 @@ export type OrganizationUsage = {
   isActive: boolean;
   subscriptionEndsAt: string | null;
   monthlyFeePen: number | null;
+  demoEnabled: boolean;
+  demoDays: number | null;
+  subscriptionExpired: boolean;
+  accessBlocked: boolean;
 };
 
 export type CanAddUserResult = {
@@ -50,7 +56,7 @@ export type CanAddUserResult = {
 };
 
 const ORG_PLAN_SELECT =
-  'id, name, code, ruc, is_active, created_at, plan_tier, max_users, max_receipts_per_month, extra_users, extra_receipts, allow_receipt_overage, overage_fee_per_receipt, monthly_fee_pen, billing_cycle, subscription_starts_at, subscription_ends_at';
+  'id, name, code, ruc, is_active, created_at, plan_tier, max_users, max_receipts_per_month, extra_users, extra_receipts, allow_receipt_overage, overage_fee_per_receipt, monthly_fee_pen, billing_cycle, subscription_starts_at, subscription_ends_at, demo_enabled, demo_days';
 
 export { ORG_PLAN_SELECT };
 

@@ -1,4 +1,5 @@
 import { getPortalContext } from '@/lib/portalContext';
+import { getOrganizationAccessStatus } from '@/lib/organization-access';
 import { canAccessOrgReports, canManageUsers, canViewOrgPlanUsage } from '@/lib/portal-access';
 import { loadPortalOrganizations } from '@/lib/portal-organizations';
 import { isInvalidSessionError } from '@/lib/auth-session';
@@ -33,6 +34,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   const ctx = await getPortalContext();
+
+  // Bloqueo por demo/suscripción vencida o empresa inactiva (superadmin exento).
+  if (!ctx.isSuperAdmin && ctx.orgId) {
+    const access = await getOrganizationAccessStatus(ctx.orgId);
+    if (access.blocked) {
+      redirect('/cuenta-suspendida');
+    }
+  }
 
   const canSeeReports = canAccessOrgReports(ctx);
   const canSeeAdmin = canManageUsers(ctx);

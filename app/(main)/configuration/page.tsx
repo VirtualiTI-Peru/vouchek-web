@@ -21,6 +21,8 @@ export default function SuperAdminPage() {
   const [ruc, setRuc] = useState('');
   const [planTier, setPlanTier] = useState<PlanTier>('esencial');
   const [isActive, setIsActive] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  const [demoDays, setDemoDays] = useState('15');
 
   const superAdmins = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '')
     .split(';')
@@ -65,6 +67,12 @@ export default function SuperAdminPage() {
       return;
     }
 
+    const demoDaysNum = Math.floor(Number(demoDays));
+    if (isDemo && (!Number.isFinite(demoDaysNum) || demoDaysNum < 1)) {
+      alert('Indica un número de días de demo válido (mínimo 1).');
+      return;
+    }
+
     setCreating(true);
     try {
       const res = await fetch('/api/superadmin/organizations', {
@@ -76,6 +84,8 @@ export default function SuperAdminPage() {
           ruc: ruc.trim(),
           isActive,
           planTier,
+          demoEnabled: isDemo,
+          demoDays: isDemo ? demoDaysNum : null,
         }),
       });
 
@@ -90,6 +100,8 @@ export default function SuperAdminPage() {
       setRuc('');
       setPlanTier('esencial');
       setIsActive(true);
+      setIsDemo(false);
+      setDemoDays('15');
       await loadOrganizations();
     } finally {
       setCreating(false);
@@ -138,6 +150,41 @@ export default function SuperAdminPage() {
     await loadOrganizations();
   };
 
+  const handleDemoChange = async (organization: OrganizationWithUsage) => {
+    const current = organization.demo_enabled ? String(organization.demo_days ?? '') : '';
+    const input = window.prompt(
+      `Días de demo para ${organization.name} (vacío o 0 para desactivar el demo):`,
+      current,
+    );
+    if (input === null) return;
+
+    const trimmed = input.trim();
+    const days = Math.floor(Number(trimmed));
+    const enable = trimmed !== '' && Number.isFinite(days) && days >= 1;
+
+    if (trimmed !== '' && !enable) {
+      alert('Indica un número de días válido (mínimo 1) o deja vacío para desactivar.');
+      return;
+    }
+
+    const res = await fetch('/api/superadmin/organizations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: organization.id,
+        demoEnabled: enable,
+        demoDays: enable ? days : null,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? 'No se pudo actualizar el demo.');
+      return;
+    }
+
+    await loadOrganizations();
+  };
+
   if (!isSuperAdmin) {
     return <div className="text-default-600">Acceso denegado.</div>;
   }
@@ -179,9 +226,29 @@ export default function SuperAdminPage() {
               </div>
             </div>
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Checkbox id="active" checked={isActive} onCheckedChange={(v) => setIsActive(v === true)} disabled={creating} />
-                <Label htmlFor="active">Activo</Label>
+              <div className="flex items-center gap-6 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="active" checked={isActive} onCheckedChange={(v) => setIsActive(v === true)} disabled={creating} />
+                  <Label htmlFor="active">Activo</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id="demo" checked={isDemo} onCheckedChange={(v) => setIsDemo(v === true)} disabled={creating} />
+                  <Label htmlFor="demo">Demo</Label>
+                </div>
+                {isDemo && (
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="demoDays">Días de demo</Label>
+                    <Input
+                      id="demoDays"
+                      type="number"
+                      min={1}
+                      className="w-24"
+                      value={demoDays}
+                      onChange={(e) => setDemoDays(e.target.value)}
+                      disabled={creating}
+                    />
+                  </div>
+                )}
               </div>
               <Button type="submit" disabled={creating}>
                 {creating ? 'Añadiendo...' : 'Añadir'}
@@ -200,6 +267,7 @@ export default function SuperAdminPage() {
               canManage={isSuperAdmin}
               onToggleStatus={handleToggleStatus}
               onPlanChange={handlePlanChange}
+              onDemoChange={handleDemoChange}
             />
           )}
         </CardContent>

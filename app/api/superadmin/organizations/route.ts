@@ -83,6 +83,36 @@ function buildPlanInsert(planTier: PlanTier, body: Record<string, unknown>) {
   };
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Calcula los campos de demo. Cuando se habilita un demo, el periodo arranca
+// "ahora" y subscription_ends_at se usa para bloquear el acceso al expirar.
+function buildDemoFields(body: Record<string, unknown>): Record<string, unknown> | null {
+  if (body.demoEnabled === undefined) {
+    return null;
+  }
+
+  const enabled = body.demoEnabled === true;
+  if (!enabled) {
+    return {
+      demo_enabled: false,
+      demo_days: null,
+      subscription_ends_at: null,
+    };
+  }
+
+  const days = Math.max(1, Math.floor(Number(body.demoDays) || 0));
+  const startsAt = new Date();
+  const endsAt = new Date(startsAt.getTime() + days * DAY_MS);
+
+  return {
+    demo_enabled: true,
+    demo_days: days,
+    subscription_starts_at: startsAt.toISOString(),
+    subscription_ends_at: endsAt.toISOString(),
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { user, isSuperAdmin, role } = await getAuthContext(req);
@@ -164,6 +194,7 @@ export async function POST(req: NextRequest) {
     );
 
     const planFields = buildPlanInsert(planTier, body);
+    const demoFields = buildDemoFields(body);
 
     const { data, error } = await supabaseAdmin
       .from('organizations')
@@ -173,6 +204,7 @@ export async function POST(req: NextRequest) {
         ruc: ruc || null,
         is_active: isActive,
         ...planFields,
+        ...(demoFields ?? {}),
       })
       .select(ORG_PLAN_SELECT)
       .single();
@@ -248,6 +280,11 @@ export async function PATCH(req: NextRequest) {
           ? new Date(String(body.subscriptionEndsAt)).toISOString()
           : null;
       }
+    }
+
+    const demoFields = buildDemoFields(body);
+    if (demoFields) {
+      Object.assign(updates, demoFields);
     }
 
     if (Object.keys(updates).length === 0) {
