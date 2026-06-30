@@ -1,5 +1,5 @@
 import { getPortalContext } from '@/lib/portalContext';
-import { canAccessOrgReports, canManageUsers } from '@/lib/portal-access';
+import { canAccessOrgReports, canManageUsers, canViewOrgPlanUsage } from '@/lib/portal-access';
 import { loadPortalOrganizations } from '@/lib/portal-organizations';
 import { isInvalidSessionError } from '@/lib/auth-session';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
@@ -37,6 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const canSeeReports = canAccessOrgReports(ctx);
   const canSeeAdmin = canManageUsers(ctx);
   const canSeeSuper = ctx.isSuperAdmin;
+  const canSeeUsage = canViewOrgPlanUsage(ctx);
   const organizations = canSeeSuper ? await loadPortalOrganizations(ctx) : [];
 
   return (
@@ -45,6 +46,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       canSeeReports={canSeeReports}
       canSeeAdmin={canSeeAdmin}
       canSeeSuper={canSeeSuper}
+      canSeeUsage={canSeeUsage}
+      orgId={ctx.orgId}
       organizations={organizations}
     >
       {children}

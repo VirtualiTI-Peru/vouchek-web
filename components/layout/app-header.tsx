@@ -6,6 +6,7 @@ import { useConfig } from '@/hooks/use-config';
 import { cn } from '@/lib/utils';
 import { ThemeSwitcher } from './theme-switcher';
 import { UserMenu } from './user-menu';
+import { QuotaButton } from './quota-button';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { NavLinks } from './app-sidebar';
@@ -22,6 +23,8 @@ type AppHeaderProps = {
   canSeeReports?: boolean;
   canSeeAdmin?: boolean;
   canSeeSuper?: boolean;
+  canSeeUsage?: boolean;
+  orgId?: string;
   organizations?: PortalOrganization[];
   onProfileClick?: () => void;
 };
@@ -31,6 +34,8 @@ export function AppHeader({
   canSeeReports,
   canSeeAdmin,
   canSeeSuper,
+  canSeeUsage,
+  orgId,
   organizations = [],
   onProfileClick,
 }: AppHeaderProps) {
@@ -84,6 +89,13 @@ export function AppHeader({
 
         <div className="flex items-center gap-2">
           <ThemeSwitcher />
+          {canSeeUsage ? (
+            <QuotaButton
+              ownOrgId={orgId}
+              isSuperAdmin={canSeeSuper}
+              organizations={organizations}
+            />
+          ) : null}
           <UserMenu user={user} onProfileClick={onProfileClick} />
         </div>
       </div>

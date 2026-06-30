@@ -89,7 +89,7 @@ export default function OrganizationUsageWidget({ usage }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-5">
           <UsageMeter
             label="Usuarios"
             used={usage.usersReserved}

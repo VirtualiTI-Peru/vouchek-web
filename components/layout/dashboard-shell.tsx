@@ -16,6 +16,8 @@ type DashboardShellProps = {
   canSeeReports?: boolean;
   canSeeAdmin?: boolean;
   canSeeSuper?: boolean;
+  canSeeUsage?: boolean;
+  orgId?: string;
   organizations?: PortalOrganization[];
   children: React.ReactNode;
 };
@@ -25,6 +27,8 @@ export function DashboardShell({
   canSeeReports,
   canSeeAdmin,
   canSeeSuper,
+  canSeeUsage,
+  orgId,
   organizations = [],
   children,
 }: DashboardShellProps) {
@@ -40,6 +44,8 @@ export function DashboardShell({
         canSeeReports={canSeeReports}
         canSeeAdmin={canSeeAdmin}
         canSeeSuper={canSeeSuper}
+        canSeeUsage={canSeeUsage}
+        orgId={orgId}
         organizations={organizations}
         onProfileClick={() => setProfileOpen(true)}
       />
