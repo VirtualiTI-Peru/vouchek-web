@@ -19,13 +19,17 @@ type UserMenuProps = {
     email?: string;
     user_metadata?: { full_name?: string };
   } | null;
+  displayName?: string;
   onProfileClick?: () => void;
 };
 
-export function UserMenu({ user, onProfileClick }: UserMenuProps) {
+export function UserMenu({ user, displayName, onProfileClick }: UserMenuProps) {
   const router = useRouter();
-  const displayName = user?.user_metadata?.full_name || user?.email || 'Usuario';
-  const initial = displayName.charAt(0).toUpperCase();
+  const name =
+    displayName?.trim()
+    || user?.user_metadata?.full_name?.trim()
+    || 'Usuario';
+  const initial = name.charAt(0).toUpperCase();
 
   const handleSignOut = async () => {
     const supabase = createBrowserClient(
@@ -45,7 +49,7 @@ export function UserMenu({ user, onProfileClick }: UserMenuProps) {
             <AvatarFallback>{initial}</AvatarFallback>
           </Avatar>
           <span className="text-sm font-medium capitalize hidden lg:inline max-w-[140px] truncate">
-            {displayName}
+            {name}
           </span>
           <ChevronDown className="h-4 w-4 hidden lg:inline opacity-60" />
         </Button>
@@ -53,7 +57,7 @@ export function UserMenu({ user, onProfileClick }: UserMenuProps) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
           <div className="flex flex-col gap-0.5">
-            <span className="font-medium truncate">{displayName}</span>
+            <span className="font-medium truncate">{name}</span>
             {user?.email && (
               <span className="text-xs font-normal text-muted-foreground truncate">{user.email}</span>
             )}

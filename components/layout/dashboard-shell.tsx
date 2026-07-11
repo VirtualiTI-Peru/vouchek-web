@@ -13,6 +13,7 @@ type DashboardShellProps = {
     email?: string;
     user_metadata?: { full_name?: string };
   } | null;
+  displayName?: string;
   canSeeReports?: boolean;
   canSeeAdmin?: boolean;
   canSeeSuper?: boolean;
@@ -24,6 +25,7 @@ type DashboardShellProps = {
 
 export function DashboardShell({
   user,
+  displayName,
   canSeeReports,
   canSeeAdmin,
   canSeeSuper,
@@ -41,6 +43,7 @@ export function DashboardShell({
       </Suspense>
       <AppHeader
         user={user}
+        displayName={displayName}
         canSeeReports={canSeeReports}
         canSeeAdmin={canSeeAdmin}
         canSeeSuper={canSeeSuper}

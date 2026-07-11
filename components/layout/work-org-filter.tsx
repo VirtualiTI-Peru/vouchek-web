@@ -27,6 +27,7 @@ export function WorkOrgFilter({ isSuperAdmin = false, organizations = [] }: Work
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const canSwitchOrganization = isSuperAdmin && organizations.length > 1;
 
   const selectedCustomerId = useMemo(
     () => resolveWorkCustomerId(
@@ -59,11 +60,13 @@ export function WorkOrgFilter({ isSuperAdmin = false, organizations = [] }: Work
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [isSuperAdmin, organizations, pathname, router, searchParams]);
 
-  if (!isWorkDateRoute(pathname) || !isSuperAdmin || organizations.length === 0) {
+  if (!isWorkDateRoute(pathname) || organizations.length === 0) {
     return null;
   }
 
   function handleOrganizationChange(nextCustomerId: string) {
+    if (!canSwitchOrganization) return;
+
     setStoredWorkCustomerId(nextCustomerId);
 
     const params = new URLSearchParams(searchParams.toString());
@@ -77,11 +80,15 @@ export function WorkOrgFilter({ isSuperAdmin = false, organizations = [] }: Work
         Empresa
       </Label>
       <Select
-        value={selectedCustomerId}
+        value={selectedCustomerId || organizations[0]?.id}
         onValueChange={handleOrganizationChange}
-        disabled={organizations.length <= 1}
+        disabled={!canSwitchOrganization}
       >
-        <SelectTrigger id="work-org-filter" className="min-w-[180px] h-8">
+        <SelectTrigger
+          id="work-org-filter"
+          className="min-w-[180px] h-8"
+          aria-readonly={!canSwitchOrganization}
+        >
           <SelectValue placeholder="Seleccionar empresa" />
         </SelectTrigger>
         <SelectContent>

@@ -47,11 +47,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const canSeeAdmin = canManageUsers(ctx);
   const canSeeSuper = ctx.isSuperAdmin;
   const canSeeUsage = canViewOrgPlanUsage(ctx);
-  const organizations = canSeeSuper ? await loadPortalOrganizations(ctx) : [];
+  const organizations = await loadPortalOrganizations(ctx);
 
   return (
     <DashboardShell
       user={user}
+      displayName={ctx.fullName}
       canSeeReports={canSeeReports}
       canSeeAdmin={canSeeAdmin}
       canSeeSuper={canSeeSuper}

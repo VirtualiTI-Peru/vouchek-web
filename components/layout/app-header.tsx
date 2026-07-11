@@ -20,6 +20,7 @@ type AppHeaderProps = {
     email?: string;
     user_metadata?: { full_name?: string };
   } | null;
+  displayName?: string;
   canSeeReports?: boolean;
   canSeeAdmin?: boolean;
   canSeeSuper?: boolean;
@@ -31,6 +32,7 @@ type AppHeaderProps = {
 
 export function AppHeader({
   user,
+  displayName,
   canSeeReports,
   canSeeAdmin,
   canSeeSuper,
@@ -96,7 +98,7 @@ export function AppHeader({
               organizations={organizations}
             />
           ) : null}
-          <UserMenu user={user} onProfileClick={onProfileClick} />
+          <UserMenu user={user} displayName={displayName} onProfileClick={onProfileClick} />
         </div>
       </div>
     </header>
