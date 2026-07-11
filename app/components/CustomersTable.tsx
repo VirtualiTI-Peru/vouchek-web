@@ -23,6 +23,7 @@ export type OrganizationWithUsage = {
   monthly_fee_pen: number | null;
   demo_enabled: boolean;
   demo_days: number | null;
+  allow_duplicate_receipts: boolean;
   subscription_ends_at?: string | null;
   usage?: OrganizationUsage | null;
 };
@@ -54,12 +55,14 @@ export default function CustomersTable({
   onToggleStatus,
   onPlanChange,
   onDemoChange,
+  onAllowDupesChange,
 }: {
   organizations: OrganizationWithUsage[];
   canManage: boolean;
   onToggleStatus: (org: OrganizationWithUsage, nextActive: boolean) => void;
   onPlanChange: (org: OrganizationWithUsage, planTier: PlanTier) => void;
   onDemoChange?: (org: OrganizationWithUsage) => void;
+  onAllowDupesChange?: (org: OrganizationWithUsage, next: boolean) => void;
 }) {
   return (
     <div className="rounded-md border border-default-200 overflow-hidden">
@@ -72,14 +75,15 @@ export default function CustomersTable({
             <TableHead>Usuarios</TableHead>
             <TableHead>Comprobantes/mes</TableHead>
             <TableHead>Estado</TableHead>
-            <TableHead>Demo</TableHead>
+            <TableHead>Periodo de prueba</TableHead>
+            <TableHead>Dupes</TableHead>
             <TableHead>Acción</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {organizations.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="text-center py-8 text-default-500">
+              <TableCell colSpan={9} className="text-center py-8 text-default-500">
                 No hay clientes.
               </TableCell>
             </TableRow>
@@ -117,7 +121,7 @@ export default function CustomersTable({
                     if (!organization.demo_enabled) {
                       return canManage && onDemoChange ? (
                         <Button size="sm" variant="outline" onClick={() => onDemoChange(organization)}>
-                          Activar demo
+                          Activar prueba
                         </Button>
                       ) : (
                         <span className="text-default-400">—</span>
@@ -129,10 +133,10 @@ export default function CustomersTable({
                       <div className="flex items-center gap-2">
                         <Badge color={expired ? 'destructive' : 'warning'}>
                           {expired
-                            ? 'Demo vencido'
+                            ? 'Prueba vencida'
                             : remaining !== null
-                              ? `Demo · ${remaining}d`
-                              : 'Demo'}
+                              ? `Prueba · ${remaining}d`
+                              : 'Prueba'}
                         </Badge>
                         {canManage && onDemoChange && (
                           <Button
@@ -146,6 +150,32 @@ export default function CustomersTable({
                       </div>
                     );
                   })()}
+                </TableCell>
+                <TableCell>
+                  {organization.allow_duplicate_receipts ? (
+                    <div className="flex items-center gap-2">
+                      <Badge color="secondary">Dupes</Badge>
+                      {canManage && onAllowDupesChange && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onAllowDupesChange(organization, false)}
+                        >
+                          Quitar
+                        </Button>
+                      )}
+                    </div>
+                  ) : canManage && onAllowDupesChange ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onAllowDupesChange(organization, true)}
+                    >
+                      Permitir
+                    </Button>
+                  ) : (
+                    <span className="text-default-400">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {canManage ? (

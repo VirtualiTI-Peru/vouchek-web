@@ -21,8 +21,9 @@ export default function SuperAdminPage() {
   const [ruc, setRuc] = useState('');
   const [planTier, setPlanTier] = useState<PlanTier>('esencial');
   const [isActive, setIsActive] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
-  const [demoDays, setDemoDays] = useState('15');
+  const [trialEnabled, setTrialEnabled] = useState(false);
+  const [trialDays, setTrialDays] = useState('15');
+  const [allowDuplicateReceipts, setAllowDuplicateReceipts] = useState(false);
 
   const superAdmins = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '')
     .split(';')
@@ -67,9 +68,9 @@ export default function SuperAdminPage() {
       return;
     }
 
-    const demoDaysNum = Math.floor(Number(demoDays));
-    if (isDemo && (!Number.isFinite(demoDaysNum) || demoDaysNum < 1)) {
-      alert('Indica un número de días de demo válido (mínimo 1).');
+    const trialDaysNum = Math.floor(Number(trialDays));
+    if (trialEnabled && (!Number.isFinite(trialDaysNum) || trialDaysNum < 1)) {
+      alert('Indica un número de días de prueba válido (mínimo 1).');
       return;
     }
 
@@ -84,8 +85,9 @@ export default function SuperAdminPage() {
           ruc: ruc.trim(),
           isActive,
           planTier,
-          demoEnabled: isDemo,
-          demoDays: isDemo ? demoDaysNum : null,
+          demoEnabled: trialEnabled,
+          demoDays: trialEnabled ? trialDaysNum : null,
+          allowDuplicateReceipts,
         }),
       });
 
@@ -100,8 +102,9 @@ export default function SuperAdminPage() {
       setRuc('');
       setPlanTier('esencial');
       setIsActive(true);
-      setIsDemo(false);
-      setDemoDays('15');
+      setTrialEnabled(false);
+      setTrialDays('15');
+      setAllowDuplicateReceipts(false);
       await loadOrganizations();
     } finally {
       setCreating(false);
@@ -153,7 +156,7 @@ export default function SuperAdminPage() {
   const handleDemoChange = async (organization: OrganizationWithUsage) => {
     const current = organization.demo_enabled ? String(organization.demo_days ?? '') : '';
     const input = window.prompt(
-      `Días de demo para ${organization.name} (vacío o 0 para desactivar el demo):`,
+      `Días de periodo de prueba para ${organization.name} (vacío o 0 para desactivar):`,
       current,
     );
     if (input === null) return;
@@ -178,7 +181,30 @@ export default function SuperAdminPage() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data?.error ?? 'No se pudo actualizar el demo.');
+      alert(data?.error ?? 'No se pudo actualizar el periodo de prueba.');
+      return;
+    }
+
+    await loadOrganizations();
+  };
+
+  const handleAllowDupesChange = async (organization: OrganizationWithUsage, next: boolean) => {
+    const action = next ? 'permitir duplicados en resúmenes' : 'dejar de permitir duplicados';
+    if (!confirm(`¿Deseas ${action} para ${organization.name}? (Solo para orgs DEMO / testers)`)) {
+      return;
+    }
+
+    const res = await fetch('/api/superadmin/organizations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: organization.id,
+        allowDuplicateReceipts: next,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? 'No se pudo actualizar el flag de duplicados.');
       return;
     }
 
@@ -232,23 +258,37 @@ export default function SuperAdminPage() {
                   <Label htmlFor="active">Activo</Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Checkbox id="demo" checked={isDemo} onCheckedChange={(v) => setIsDemo(v === true)} disabled={creating} />
-                  <Label htmlFor="demo">Demo</Label>
+                  <Checkbox
+                    id="trial"
+                    checked={trialEnabled}
+                    onCheckedChange={(v) => setTrialEnabled(v === true)}
+                    disabled={creating}
+                  />
+                  <Label htmlFor="trial">Periodo de prueba</Label>
                 </div>
-                {isDemo && (
+                {trialEnabled && (
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="demoDays">Días de demo</Label>
+                    <Label htmlFor="trialDays">Días</Label>
                     <Input
-                      id="demoDays"
+                      id="trialDays"
                       type="number"
                       min={1}
                       className="w-24"
-                      value={demoDays}
-                      onChange={(e) => setDemoDays(e.target.value)}
+                      value={trialDays}
+                      onChange={(e) => setTrialDays(e.target.value)}
                       disabled={creating}
                     />
                   </div>
                 )}
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="allowDupes"
+                    checked={allowDuplicateReceipts}
+                    onCheckedChange={(v) => setAllowDuplicateReceipts(v === true)}
+                    disabled={creating}
+                  />
+                  <Label htmlFor="allowDupes">Permitir duplicados en resúmenes (DEMO / testers)</Label>
+                </div>
               </div>
               <Button type="submit" disabled={creating}>
                 {creating ? 'Añadiendo...' : 'Añadir'}
@@ -257,7 +297,7 @@ export default function SuperAdminPage() {
           </form>
 
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-10 text-default-500">
+            <div className="flex items-center gap-2 justify-center py-10 text-default-500">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span>Cargando clientes...</span>
             </div>
@@ -268,6 +308,7 @@ export default function SuperAdminPage() {
               onToggleStatus={handleToggleStatus}
               onPlanChange={handlePlanChange}
               onDemoChange={handleDemoChange}
+              onAllowDupesChange={handleAllowDupesChange}
             />
           )}
         </CardContent>

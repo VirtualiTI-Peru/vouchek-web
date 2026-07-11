@@ -195,6 +195,7 @@ export async function POST(req: NextRequest) {
 
     const planFields = buildPlanInsert(planTier, body);
     const demoFields = buildDemoFields(body);
+    const allowDuplicateReceipts = body?.allowDuplicateReceipts === true;
 
     const { data, error } = await supabaseAdmin
       .from('organizations')
@@ -203,6 +204,7 @@ export async function POST(req: NextRequest) {
         code,
         ruc: ruc || null,
         is_active: isActive,
+        allow_duplicate_receipts: allowDuplicateReceipts,
         ...planFields,
         ...(demoFields ?? {}),
       })
@@ -285,6 +287,10 @@ export async function PATCH(req: NextRequest) {
     const demoFields = buildDemoFields(body);
     if (demoFields) {
       Object.assign(updates, demoFields);
+    }
+
+    if (body.allowDuplicateReceipts !== undefined) {
+      updates.allow_duplicate_receipts = body.allowDuplicateReceipts === true;
     }
 
     if (Object.keys(updates).length === 0) {
