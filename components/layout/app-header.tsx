@@ -82,7 +82,11 @@ export function AppHeader({
 
           <VouchekLogo width={112} className="xl:hidden" />
           <Suspense fallback={null}>
-            <WorkOrgFilter isSuperAdmin={canSeeSuper} organizations={organizations} />
+            <WorkOrgFilter
+              isSuperAdmin={canSeeSuper}
+              organizations={organizations}
+              ownOrgId={orgId}
+            />
           </Suspense>
           <Suspense fallback={null}>
             <WorkDateFilter />

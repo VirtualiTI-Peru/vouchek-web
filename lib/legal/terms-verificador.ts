@@ -22,5 +22,5 @@ export const TERMS_VERIFICADOR: TermsDocument = {
   ],
   checkboxLabel:
     'Confirmo mi rol de verificador y acepto el compromiso de reserva y resguardo de la información.',
-  acceptButtonLabel: 'Ingresar al Tablero Web',
+  acceptButtonLabel: 'Ingresar al VouChek',
 };

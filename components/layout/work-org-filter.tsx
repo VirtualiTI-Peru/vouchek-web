@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
+  clearStoredWorkCustomerId,
   resolveWorkCustomerId,
   setStoredWorkCustomerId,
   WORK_CUSTOMER_ID_PARAM,
@@ -21,25 +22,62 @@ import {
 type WorkOrgFilterProps = {
   isSuperAdmin?: boolean;
   organizations?: PortalOrganization[];
+  /** Home org for non-superadmin (JWT org_id). */
+  ownOrgId?: string;
 };
 
-export function WorkOrgFilter({ isSuperAdmin = false, organizations = [] }: WorkOrgFilterProps) {
+export function WorkOrgFilter({
+  isSuperAdmin = false,
+  organizations = [],
+  ownOrgId = '',
+}: WorkOrgFilterProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const canSwitchOrganization = isSuperAdmin && organizations.length > 1;
 
+  const fallbackCustomerId = isSuperAdmin
+    ? (organizations[0]?.id ?? '')
+    : (ownOrgId || organizations[0]?.id || '');
+
   const selectedCustomerId = useMemo(
     () => resolveWorkCustomerId(
-      searchParams.get(WORK_CUSTOMER_ID_PARAM),
+      isSuperAdmin ? searchParams.get(WORK_CUSTOMER_ID_PARAM) : null,
       organizations,
-      organizations[0]?.id ?? '',
+      fallbackCustomerId,
     ),
-    [organizations, searchParams],
+    [fallbackCustomerId, isSuperAdmin, organizations, searchParams],
   );
 
   useEffect(() => {
-    if (!isWorkDateRoute(pathname) || !isSuperAdmin || organizations.length === 0) {
+    if (!isWorkDateRoute(pathname)) {
+      return;
+    }
+
+    if (!isSuperAdmin) {
+      // Non-switchers must never keep another org id in the URL/storage.
+      const urlCustomerId = searchParams.get(WORK_CUSTOMER_ID_PARAM)?.trim() ?? '';
+      const homeOrgId = fallbackCustomerId;
+      if (!homeOrgId) {
+        return;
+      }
+
+      if (urlCustomerId && urlCustomerId !== homeOrgId) {
+        clearStoredWorkCustomerId();
+      }
+      setStoredWorkCustomerId(homeOrgId);
+
+      if (urlCustomerId === homeOrgId) {
+        return;
+      }
+
+      const params = new URLSearchParams(searchParams.toString());
+      params.set(WORK_CUSTOMER_ID_PARAM, homeOrgId);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      return;
+    }
+
+    if (organizations.length === 0) {
       return;
     }
 
@@ -50,15 +88,20 @@ export function WorkOrgFilter({ isSuperAdmin = false, organizations = [] }: Work
       organizations[0]?.id ?? '',
     );
 
+    if (!resolvedCustomerId) {
+      return;
+    }
+
     if (urlCustomerId && organizations.some((organization) => organization.id === urlCustomerId)) {
       setStoredWorkCustomerId(resolvedCustomerId);
       return;
     }
 
+    setStoredWorkCustomerId(resolvedCustomerId);
     const params = new URLSearchParams(searchParams.toString());
     params.set(WORK_CUSTOMER_ID_PARAM, resolvedCustomerId);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [isSuperAdmin, organizations, pathname, router, searchParams]);
+  }, [fallbackCustomerId, isSuperAdmin, organizations, pathname, router, searchParams]);
 
   if (!isWorkDateRoute(pathname) || organizations.length === 0) {
     return null;

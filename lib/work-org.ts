@@ -31,11 +31,29 @@ export function setStoredWorkCustomerId(customerId: string): void {
   }
 }
 
+export function clearStoredWorkCustomerId(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    sessionStorage.removeItem(WORK_CUSTOMER_ID_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+/**
+ * Resolve the active work organization.
+ * Prefer URL → sessionStorage → fallback, but only IDs that belong to `organizations`.
+ * When the org list is empty (transient load failure), keep using `fallbackCustomerId`.
+ */
 export function resolveWorkCustomerId(
   customerIdParam: string | null | undefined,
   organizations: PortalOrganization[],
   fallbackCustomerId: string,
 ): string {
+  const trimmedFallback = fallbackCustomerId.trim();
   const organizationIds = new Set(organizations.map((organization) => organization.id));
 
   if (customerIdParam && organizationIds.has(customerIdParam)) {
@@ -47,9 +65,11 @@ export function resolveWorkCustomerId(
     return storedCustomerId;
   }
 
-  if (fallbackCustomerId && organizationIds.has(fallbackCustomerId)) {
-    return fallbackCustomerId;
+  if (trimmedFallback) {
+    if (organizations.length === 0 || organizationIds.has(trimmedFallback)) {
+      return trimmedFallback;
+    }
   }
 
-  return organizations[0]?.id ?? '';
+  return organizations[0]?.id ?? trimmedFallback;
 }

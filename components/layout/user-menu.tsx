@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { clearStoredWorkCustomerId } from '@/lib/work-org';
 
 type UserMenuProps = {
   user?: {
@@ -32,6 +33,7 @@ export function UserMenu({ user, displayName, onProfileClick }: UserMenuProps) {
   const initial = name.charAt(0).toUpperCase();
 
   const handleSignOut = async () => {
+    clearStoredWorkCustomerId();
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

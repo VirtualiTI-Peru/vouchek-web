@@ -107,7 +107,7 @@ export function resolveWorkDate(searchParams: URLSearchParams): StoredWorkDate {
   return { date: today, timezoneOffsetMinutes: getTimezoneOffsetMinutes(today) };
 }
 
-import { getStoredWorkCustomerId, WORK_CUSTOMER_ID_PARAM } from '@/lib/work-org';
+import { WORK_CUSTOMER_ID_PARAM } from '@/lib/work-org';
 
 export function appendWorkDateToHref(href: string, searchParams: URLSearchParams): string {
   if (href !== '/dashboard' && href !== '/receipts') {
@@ -117,7 +117,10 @@ export function appendWorkDateToHref(href: string, searchParams: URLSearchParams
   const { date, timezoneOffsetMinutes } = resolveWorkDate(searchParams);
   const params = new URLSearchParams(buildWorkDateQuery(date, timezoneOffsetMinutes));
 
-  const customerId = searchParams.get(WORK_CUSTOMER_ID_PARAM) ?? getStoredWorkCustomerId();
+  // Only forward customerId already in the current URL. Do not inject sessionStorage:
+  // a stale org from another account/role would otherwise cause FORBIDDEN_ORG on BFF routes.
+  // WorkOrgFilter writes the correct customerId into the URL on work routes.
+  const customerId = searchParams.get(WORK_CUSTOMER_ID_PARAM)?.trim();
   if (customerId) {
     params.set(WORK_CUSTOMER_ID_PARAM, customerId);
   }

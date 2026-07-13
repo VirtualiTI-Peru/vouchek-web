@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -43,6 +44,7 @@ export default function DashboardSummary({
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [summaryData, setSummaryData] = useState<ReceiptsSummaryByDate | null>(data);
+  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'fullName' | 'transactionSource' | 'totalAmount'>('totalAmount');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const summaryCacheRef = useRef<Record<string, ReceiptsSummaryByDate | null>>({});
@@ -56,11 +58,13 @@ export default function DashboardSummary({
     const cachedSummary = summaryCacheRef.current[cacheKey];
     if (cachedSummary) {
       setSummaryData(cachedSummary);
+      setError(null);
       return;
     }
 
     if (!nextCustomerId) {
       setSummaryData(null);
+      setError(null);
       return;
     }
 
@@ -70,8 +74,10 @@ export default function DashboardSummary({
       });
       summaryCacheRef.current[cacheKey] = nextSummary;
       setSummaryData(nextSummary);
-    } catch {
-      setSummaryData(null);
+      setError(null);
+    } catch (err) {
+      // Keep any previously good data (e.g. SSR) instead of wiping the Resumen.
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el resumen.');
     }
   }
 
@@ -83,18 +89,20 @@ export default function DashboardSummary({
 
     if (!customerId) {
       setSummaryData(null);
+      setError(null);
       return;
     }
 
     const cacheKey = buildSummaryCacheKey(customerId, date, effectiveTimezoneOffsetMinutes);
-    const canUseServerData =
-      typeof initialTimezoneOffsetMinutes === 'number' &&
-      data !== null;
 
-    if (canUseServerData) {
+    if (data !== null) {
       summaryCacheRef.current[cacheKey] = data;
       setSummaryData(data);
-      return;
+      setError(null);
+      // If the server rendered without the browser timezone, refine in the background.
+      if (typeof initialTimezoneOffsetMinutes === 'number') {
+        return;
+      }
     }
 
     void loadSummary(customerId, date, effectiveTimezoneOffsetMinutes);
@@ -149,6 +157,11 @@ export default function DashboardSummary({
 
   return (
     <div className="space-y-8">
+      {error ? (
+        <Alert color="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
       <div>
         <h3 className="text-lg font-semibold mb-4 text-default-900">Resumen por origen</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

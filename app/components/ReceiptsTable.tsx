@@ -437,13 +437,25 @@ export default function ReceiptsTable({
 
   useEffect(() => {
     const urlCustomerId = searchParams.get(WORK_CUSTOMER_ID_PARAM)?.trim() ?? '';
+
+    // Non-superadmin: never switch to a foreign/stale URL customerId (causes FORBIDDEN_ORG).
+    if (!isSuperAdmin) {
+      if (initialCustomerId && selectedOrg !== initialCustomerId) {
+        setSelectedOrg(initialCustomerId);
+        setCurrentPage(1);
+        setRefreshNotice(null);
+        setHighlightedRow(null);
+      }
+      return;
+    }
+
     if (urlCustomerId && urlCustomerId !== selectedOrg) {
       setSelectedOrg(urlCustomerId);
       setCurrentPage(1);
       setRefreshNotice(null);
       setHighlightedRow(null);
     }
-  }, [searchParams, selectedOrg]);
+  }, [searchParams, selectedOrg, isSuperAdmin, initialCustomerId]);
 
   useEffect(() => {
     if (selectedOrg) {

@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { TermsBlock, TermsDocument } from '@/lib/legal';
 import { cn } from '@/lib/utils';
+import { clearStoredWorkCustomerId } from '@/lib/work-org';
 
 type TermsAcceptanceModalProps = {
   document: TermsDocument;
@@ -68,6 +69,7 @@ export function TermsAcceptanceModal({ document, onAccepted }: TermsAcceptanceMo
   const [error, setError] = useState<string | null>(null);
 
   const handleDecline = async () => {
+    clearStoredWorkCustomerId();
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
