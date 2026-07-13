@@ -6,7 +6,9 @@ import LayoutContentProvider from '@/providers/content.provider';
 import { AppHeader } from './app-header';
 import { AppSidebar } from './app-sidebar';
 import { ProfileDialog } from './profile-dialog';
+import { TermsAcceptanceModal } from './terms-acceptance-modal';
 import type { PortalOrganization } from '@/lib/work-org';
+import type { TermsDocument } from '@/lib/legal';
 
 type DashboardShellProps = {
   user?: {
@@ -20,6 +22,7 @@ type DashboardShellProps = {
   canSeeUsage?: boolean;
   orgId?: string;
   organizations?: PortalOrganization[];
+  termsDocument?: TermsDocument | null;
   children: React.ReactNode;
 };
 
@@ -32,9 +35,13 @@ export function DashboardShell({
   canSeeUsage,
   orgId,
   organizations = [],
+  termsDocument = null,
   children,
 }: DashboardShellProps) {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(!termsDocument);
+
+  const blockedByTerms = Boolean(termsDocument) && !termsAccepted;
 
   return (
     <LayoutProvider>
@@ -52,8 +59,18 @@ export function DashboardShell({
         organizations={organizations}
         onProfileClick={() => setProfileOpen(true)}
       />
-      <LayoutContentProvider>{children}</LayoutContentProvider>
-      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <LayoutContentProvider>
+        <div className={blockedByTerms ? 'pointer-events-none select-none opacity-40' : undefined} aria-hidden={blockedByTerms}>
+          {children}
+        </div>
+      </LayoutContentProvider>
+      <ProfileDialog open={profileOpen && !blockedByTerms} onClose={() => setProfileOpen(false)} />
+      {blockedByTerms && termsDocument ? (
+        <TermsAcceptanceModal
+          document={termsDocument}
+          onAccepted={() => setTermsAccepted(true)}
+        />
+      ) : null}
     </LayoutProvider>
   );
 }

@@ -12,6 +12,7 @@ export type PortalContext = {
   role?: PortalRole;
   isSuperAdmin: boolean;
   fullName?: string;
+  termsAcceptedVersion?: string | null;
 };
 
 export async function getPortalContext(): Promise<PortalContext> {
@@ -47,7 +48,7 @@ export async function getPortalContext(): Promise<PortalContext> {
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('first_name, last_name, is_super_admin')
+    .select('first_name, last_name, is_super_admin, terms_accepted_version')
     .eq('user_id', user.id)
     .single();
 
@@ -67,5 +68,6 @@ export async function getPortalContext(): Promise<PortalContext> {
     role,
     isSuperAdmin,
     fullName,
+    termsAcceptedVersion: profile?.terms_accepted_version ?? null,
   };
 }

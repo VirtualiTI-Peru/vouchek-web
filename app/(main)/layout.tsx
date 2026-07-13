@@ -2,6 +2,7 @@ import { getPortalContext } from '@/lib/portalContext';
 import { getOrganizationAccessStatus } from '@/lib/organization-access';
 import { canAccessOrgReports, canManageUsers, canViewOrgPlanUsage } from '@/lib/portal-access';
 import { loadPortalOrganizations } from '@/lib/portal-organizations';
+import { hasAcceptedCurrentTerms, resolveWebTermsDocument } from '@/lib/legal';
 import { isInvalidSessionError } from '@/lib/auth-session';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
@@ -49,6 +50,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const canSeeUsage = canViewOrgPlanUsage(ctx);
   const organizations = await loadPortalOrganizations(ctx);
 
+  const termsDocument = resolveWebTermsDocument(ctx.role, ctx.isSuperAdmin);
+  const needsTerms = !hasAcceptedCurrentTerms(ctx.termsAcceptedVersion, termsDocument);
+
   return (
     <DashboardShell
       user={user}
@@ -59,6 +63,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       canSeeUsage={canSeeUsage}
       orgId={ctx.orgId}
       organizations={organizations}
+      termsDocument={needsTerms ? termsDocument : null}
     >
       {children}
       <Toaster />
