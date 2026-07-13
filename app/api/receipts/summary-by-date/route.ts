@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
+    // Transportista is scoped inside fetchReceiptsSummaryByDate (filter + per-user cache).
     const summary = await fetchReceiptsSummaryByDate(
       customerId,
       date,

@@ -2,7 +2,8 @@
 import type { CookieOptions } from '@supabase/ssr';
 
 import { getPortalContext } from './portalContext';
-import type { Receipt, ReceiptPage, ReceiptSummary, Customer, ReceiptsSummaryByDate } from './api-types';
+import { isOwnReceiptsOnly } from './portal-access';
+import type { Receipt, ReceiptPage, ReceiptSummary, Customer, ReceiptsSummaryByDate, TotalByUser } from './api-types';
 
 type ReceiptPageCacheEntry = {
   expiresAt: number;
@@ -206,6 +207,10 @@ export async function fetchCustomers(): Promise<Customer[]> {
 }
 
 export async function fetchReceiptsSummaryByDate(customerId: string, date: string, timezoneOffsetMinutes?: number): Promise<ReceiptsSummaryByDate> {
+  const ctx = await getPortalContext();
+  const ownOnly = isOwnReceiptsOnly(ctx);
+  const viewerScope = ownOnly ? `user:${ctx.userId}` : 'org';
+
   const normalizedCustomerId = customerId.trim();
   const normalizedDate = date.trim();
   const normalizedTimezoneOffsetMinutes = typeof timezoneOffsetMinutes === 'number'
@@ -216,6 +221,7 @@ export async function fetchReceiptsSummaryByDate(customerId: string, date: strin
     normalizedCustomerId,
     normalizedDate,
     normalizedTimezoneOffsetMinutes,
+    viewerScope,
   );
   const cachedEntry = receiptsSummaryByDateCache.get(cacheKey);
   const now = Date.now();
@@ -236,11 +242,14 @@ export async function fetchReceiptsSummaryByDate(customerId: string, date: strin
 
   const pending = apiFetch<ReceiptsSummaryByDate>(url)
     .then((summary) => {
+      const scoped = ownOnly
+        ? filterSummaryByUser(summary, ctx.userId)
+        : normalizeSummaryByDate(summary);
       receiptsSummaryByDateCache.set(cacheKey, {
-        data: summary,
+        data: scoped,
         expiresAt: Date.now() + RECEIPTS_SUMMARY_BY_DATE_CACHE_TTL_MS,
       });
-      return summary;
+      return scoped;
     })
     .catch((error) => {
       const activeEntry = receiptsSummaryByDateCache.get(cacheKey);
@@ -296,8 +305,61 @@ function buildReceiptPageCacheKey(customerId: string, skip: number, take: number
   return `${customerId}:${date ?? 'all'}:${timezoneOffsetMinutes ?? 'na'}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${skip}:${take}`;
 }
 
-function buildReceiptsSummaryByDateCacheKey(customerId: string, date: string, timezoneOffsetMinutes: number | null): string {
-  return `${customerId}:${date}:${timezoneOffsetMinutes ?? 'na'}`;
+function buildReceiptsSummaryByDateCacheKey(
+  customerId: string,
+  date: string,
+  timezoneOffsetMinutes: number | null,
+  viewerScope: string,
+): string {
+  return `${customerId}:${date}:${timezoneOffsetMinutes ?? 'na'}:${viewerScope}`;
+}
+
+function normalizeSummaryByDate(summary: ReceiptsSummaryByDate): ReceiptsSummaryByDate {
+  return {
+    summaryBySource: Array.isArray(summary.summaryBySource) ? summary.summaryBySource : [],
+    totalsByUser: Array.isArray(summary.totalsByUser) ? summary.totalsByUser : [],
+  };
+}
+
+function filterSummaryByUser(summary: ReceiptsSummaryByDate, userId: string): ReceiptsSummaryByDate {
+  const normalized = normalizeSummaryByDate(summary);
+  const totalsByUser = normalized.totalsByUser.filter((row) => {
+    const rowUserId = String(
+      (row as TotalByUser & { UserId?: string }).userId
+        ?? (row as TotalByUser & { UserId?: string }).UserId
+        ?? '',
+    );
+    return rowUserId === userId;
+  }).map((row) => {
+    const anyRow = row as TotalByUser & {
+      UserId?: string;
+      TransactionSource?: string;
+      TotalAmount?: number;
+      FullName?: string;
+    };
+    return {
+      userId: String(anyRow.userId ?? anyRow.UserId ?? ''),
+      transactionSource: String(anyRow.transactionSource ?? anyRow.TransactionSource ?? 'Sin clasificar'),
+      totalAmount: Number(anyRow.totalAmount ?? anyRow.TotalAmount ?? 0),
+      fullName: String(anyRow.fullName ?? anyRow.FullName ?? ''),
+    };
+  });
+
+  const amountBySource = new Map<string, number>();
+  for (const row of totalsByUser) {
+    amountBySource.set(
+      row.transactionSource,
+      (amountBySource.get(row.transactionSource) ?? 0) + row.totalAmount,
+    );
+  }
+
+  return {
+    summaryBySource: Array.from(amountBySource.entries()).map(([transactionSource, totalAmount]) => ({
+      transactionSource,
+      totalAmount,
+    })),
+    totalsByUser,
+  };
 }
 
 function buildEmptyReceiptPage(customerId: string, skip: number, take: number, lastUpdatedAt: string | null): ReceiptPage {
