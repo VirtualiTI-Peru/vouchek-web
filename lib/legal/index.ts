@@ -1,6 +1,6 @@
 import { TERMS_ADMINISTRADOR } from './terms-administrador';
 import { TERMS_VERIFICADOR } from './terms-verificador';
-import { termsVersionKey, type TermsDocument } from './types';
+import { termsVersionKey, type TermsBlock, type TermsDocument } from './types';
 
 export type WebTermsRole = 'org:verificador' | 'org:admin' | 'org:sistema' | string;
 
@@ -25,4 +25,4 @@ export function hasAcceptedCurrentTerms(
 }
 
 export { termsVersionKey };
-export type { TermsDocument };
+export type { TermsBlock, TermsDocument };
