@@ -5,6 +5,11 @@ import { ApiErrors } from '@/lib/api-errors';
 import { getPortalContext } from '@/lib/portalContext';
 import { isOwnReceiptsOnly } from '@/lib/portal-access';
 
+type ImageUrlResponse = {
+  url?: string;
+  expiresAtUtc?: string;
+};
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string; receiptId: string }> }
@@ -41,7 +46,7 @@ export async function GET(
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
-    const backendUrl = `${apiBaseUrl}/api/receipts/${userId}/${receiptId}/image`;
+    const backendUrl = `${apiBaseUrl}/api/receipts/${userId}/${receiptId}/image-url`;
 
     const backendRes = await fetch(backendUrl, {
       headers: { Authorization: `Bearer ${token}` },
@@ -52,10 +57,17 @@ export async function GET(
       return new NextResponse(null, { status: backendRes.status });
     }
 
-    const contentType = backendRes.headers.get('content-type') ?? 'image/jpeg';
-    const body = await backendRes.arrayBuffer();
-    return new NextResponse(body, {
-      headers: { 'Content-Type': contentType },
+    const payload = (await backendRes.json().catch(() => null)) as ImageUrlResponse | null;
+    if (!payload?.url) {
+      return NextResponse.json({ error: ApiErrors.FETCH_IMAGE }, { status: 502 });
+    }
+
+    // Browser loads bytes from Blob Storage; App Service only authorizes + issues SAS.
+    return NextResponse.redirect(payload.url, {
+      status: 302,
+      headers: {
+        'Cache-Control': 'private, max-age=60',
+      },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || ApiErrors.FETCH_IMAGE }, { status: 500 });

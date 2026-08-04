@@ -42,7 +42,9 @@ Optional:
 - `RESEND_API_KEY`: required for invite / welcome / forgot-password emails
 - `RESEND_SENDER_EMAIL`: sender address used for transactional emails
 - `RECEIPTS_CACHE_TTL_SECONDS`: server-side receipts page cache TTL in seconds, default `30`
-- `RECEIPTS_SUMMARY_CACHE_TTL_SECONDS`: receipts summary polling cache TTL in seconds, default `5`
+- `RECEIPTS_SUMMARY_CACHE_TTL_SECONDS`: receipts summary cache TTL in seconds, default `20`
+- `RECEIPTS_SUMMARY_BY_DATE_CACHE_TTL_SECONDS`: summary-by-date cache TTL in seconds, default `20`
+- `NEXT_PUBLIC_RECEIPTS_POLL_MS`: client invalidation poll interval in ms, default `30000`
 
 ## Local Development Setup
 

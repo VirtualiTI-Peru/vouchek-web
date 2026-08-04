@@ -286,17 +286,17 @@ function getReceiptsCacheTtlMs(): number {
 }
 
 function getReceiptsSummaryCacheTtlMs(): number {
-  const ttlSeconds = Number(process.env.RECEIPTS_SUMMARY_CACHE_TTL_SECONDS ?? '5');
+  const ttlSeconds = Number(process.env.RECEIPTS_SUMMARY_CACHE_TTL_SECONDS ?? '20');
   if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
-    return 5_000;
+    return 20_000;
   }
   return Math.round(ttlSeconds * 1000);
 }
 
 function getReceiptsSummaryByDateCacheTtlMs(): number {
-  const ttlSeconds = Number(process.env.RECEIPTS_SUMMARY_BY_DATE_CACHE_TTL_SECONDS ?? '10');
+  const ttlSeconds = Number(process.env.RECEIPTS_SUMMARY_BY_DATE_CACHE_TTL_SECONDS ?? '20');
   if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
-    return 10_000;
+    return 20_000;
   }
   return Math.round(ttlSeconds * 1000);
 }

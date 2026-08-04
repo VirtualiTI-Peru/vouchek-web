@@ -48,7 +48,7 @@ type LoadReceiptsOptions = {
 };
 
 const DEFAULT_PAGE_SIZE = Number(process.env.NEXT_PUBLIC_RECEIPTS_PAGE_SIZE) || 50;
-const INVALIDATION_POLL_MS = Number(process.env.NEXT_PUBLIC_RECEIPTS_POLL_MS) || 15000;
+const INVALIDATION_POLL_MS = Number(process.env.NEXT_PUBLIC_RECEIPTS_POLL_MS) || 30000;
 
 const LIMA_TIMEZONE = 'America/Lima';
 
@@ -467,6 +467,10 @@ export default function ReceiptsTable({
     if (!selectedOrg) return;
 
     const intervalId = window.setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+
       try {
         const response = await fetch(`/api/receipts/summary?customerId=${selectedOrg}`, {
           cache: 'no-store',
