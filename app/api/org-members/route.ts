@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { type User } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { canManageUsers } from '@/lib/portal-access';
 import { canAccessOrganization, getApiAuthContext, isUuid } from '@/lib/api-auth-context';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import { getUniversalAuthAdmin } from '@/lib/universal-auth-admin';
 
-async function fetchAuthUserById(
-  supabaseAdmin: SupabaseClient,
-  userId: string,
-): Promise<User | null> {
-  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+async function fetchAuthUserById(userId: string): Promise<User | null> {
+  const uaAdmin = getUniversalAuthAdmin();
+  const { data, error } = await uaAdmin.auth.admin.getUserById(userId);
   if (error || !data?.user) return null;
   return data.user;
-}
-
-function userBelongsToOrg(authUser: User, orgId: string): boolean {
-  return String(authUser.app_metadata?.org_id ?? '') === orgId;
 }
 
 export async function GET(req: NextRequest) {
@@ -42,12 +38,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
 
-    const { data: members, error: membersError } = await supabaseAdmin
+    const { data: members, error: membersError } = await dataAdmin
       .from('organization_members')
       .select('user_id, role, status')
       .eq('org_id', orgId);
@@ -62,12 +55,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const authUsers = await Promise.all(userIds.map((userId) => fetchAuthUserById(supabaseAdmin, userId)));
+    const authUsers = await Promise.all(userIds.map((userId) => fetchAuthUserById(userId)));
     const authUsersById = new Map(
       authUsers.filter((authUser): authUser is User => authUser != null).map((authUser) => [authUser.id, authUser]),
     );
 
-    const { data: profiles, error: profilesError } = await supabaseAdmin
+    const { data: profiles, error: profilesError } = await dataAdmin
       .from('profiles')
       .select('user_id, first_name, last_name, is_super_admin')
       .in('user_id', userIds);
@@ -86,23 +79,24 @@ export async function GET(req: NextRequest) {
         const profile = profilesByUserId.get(userId);
         const authUser = authUsersById.get(userId);
 
-        if (!authUser || !userBelongsToOrg(authUser, orgId)) {
+        // Membership in organization_members is the source of truth (UA has no app_metadata.org_id).
+        if (!member) {
           return null;
         }
 
         const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ');
-        const isInvited = !!authUser.invited_at && !authUser.last_sign_in_at;
+        const isInvited = !!authUser?.invited_at && !authUser?.last_sign_in_at;
 
         return {
           id: userId,
-          email: authUser.email ?? '',
-          role: member?.role ?? String(authUser.app_metadata?.role ?? ''),
-          username: fullName || authUser.email || userId,
+          email: authUser?.email ?? '',
+          role: member.role ?? '',
+          username: fullName || authUser?.email || userId,
           firstName: profile?.first_name ?? '',
           lastName: profile?.last_name ?? '',
           ...(isSuperAdmin ? { isSuperAdmin: profile?.is_super_admin === true } : {}),
-          status: member?.status ?? (isInvited ? 'invitado' : 'activo'),
-          lastSignInAt: authUser.last_sign_in_at ?? '',
+          status: member.status ?? (isInvited ? 'invitado' : 'activo'),
+          lastSignInAt: authUser?.last_sign_in_at ?? '',
         };
       })
       .filter(Boolean);

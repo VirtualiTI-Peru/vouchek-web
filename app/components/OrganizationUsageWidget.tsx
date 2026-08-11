@@ -10,8 +10,8 @@ type Props = {
   usage: OrganizationUsage;
 };
 
-function planLabel(tier: PlanTier) {
-  return PLAN_TIER_OPTIONS.find((p) => p.value === tier)?.label ?? tier;
+function planLabel(tier: PlanTier | string) {
+  return PLAN_TIER_OPTIONS.find((p) => p.value === tier)?.label ?? String(tier);
 }
 
 function usagePercent(used: number, max: number) {

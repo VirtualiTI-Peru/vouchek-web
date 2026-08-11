@@ -1,13 +1,12 @@
 'use client';
 
-import { createBrowserClient } from '@supabase/ssr';
+import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { mapSupabaseAuthError } from '@/lib/auth-errors';
 import { loadRememberedEmail, persistRememberedEmail } from '@/lib/remember-email';
 import { VouchekLogo, VouchekMark } from '@/components/vouchek-logo';
 
@@ -20,15 +19,6 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(false);
-
-  const supabase = useMemo(
-    () =>
-      createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      ),
-    [],
-  );
 
   useEffect(() => {
     void loadRememberedEmail().then(({ email: savedEmail, remember }) => {
@@ -44,15 +34,22 @@ export default function SignInPage() {
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInError) {
-      setError(mapSupabaseAuthError(signInError.message));
+
+    const result = await signIn('credentials', {
+      email: email.trim(),
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError('Credenciales inválidas o sin acceso a VouChek.');
       setLoading(false);
-    } else {
-      persistRememberedEmail(email, rememberEmail);
-      router.push('/dashboard');
-      router.refresh();
+      return;
     }
+
+    persistRememberedEmail(email, rememberEmail);
+    router.push('/dashboard');
+    router.refresh();
   };
 
   const handleForgotPassword = async () => {

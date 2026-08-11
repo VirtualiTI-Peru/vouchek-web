@@ -1,60 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
+import { VOUCHEK_APPLICATION_ID } from '@/lib/auth';
+import { getApiAuthContext } from '@/lib/api-auth-context';
+import { isVouchekRole, normalizeVouchekRole, VOUCHEK_ROLES } from '@/lib/roles';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import {
+  assignTenantUser,
+  ensureUaProfile,
+  getUniversalAuthAdmin,
+} from '@/lib/universal-auth-admin';
 
-const ALLOWED_ROLES = new Set(['org:transportista', 'org:verificador', 'org:sistema']);
-
-async function getAuthContext(req: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll() {},
-      },
-    },
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { user: null, isSuperAdmin: false, role: '', orgId: '' };
-  }
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_super_admin')
-    .eq('user_id', user.id)
-    .single();
-
-  return {
-    user,
-    isSuperAdmin: profile?.is_super_admin === true,
-    role: String(user.app_metadata?.role ?? ''),
-    orgId: String(user.app_metadata?.org_id ?? ''),
-  };
-}
+const ALLOWED_ROLES = new Set([
+  VOUCHEK_ROLES.TRANSPORTISTA,
+  VOUCHEK_ROLES.VERIFICADOR,
+  VOUCHEK_ROLES.SISTEMA,
+]);
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, isSuperAdmin, role: callerRole, orgId: callerOrgId } = await getAuthContext(req);
+    const { user, isSuperAdmin, role: callerRole, orgId: callerOrgId } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
-    if (!isSuperAdmin && callerRole !== 'org:admin' && callerRole !== 'org:sistema') {
+    if (!isSuperAdmin && !isVouchekRole(callerRole, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA)) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
@@ -63,14 +33,14 @@ export async function POST(req: NextRequest) {
     const orgId = String(body?.orgId ?? '').trim();
     const firstName = String(body?.firstName ?? '').trim();
     const lastName = String(body?.lastName ?? '').trim();
-    const role = String(body?.role ?? '').trim();
+    const normalizedRole = normalizeVouchekRole(String(body?.role ?? '').trim());
     const requestedIsSuperAdmin = body?.isSuperAdmin === true;
 
-    if (!userId || !orgId || !firstName || !lastName || !role) {
+    if (!userId || !orgId || !firstName || !lastName || !normalizedRole) {
       return NextResponse.json({ error: ApiErrors.MISSING_REQUIRED_FIELDS }, { status: 400 });
     }
 
-    if (!ALLOWED_ROLES.has(role)) {
+    if (!ALLOWED_ROLES.has(normalizedRole)) {
       return NextResponse.json({ error: 'Rol no válido.' }, { status: 400 });
     }
 
@@ -78,17 +48,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
 
     const [
       { data: targetUserData, error: userError },
       { data: targetProfile, error: profileError },
+      { data: membership },
     ] = await Promise.all([
-      supabaseAdmin.auth.admin.getUserById(userId),
-      supabaseAdmin.from('profiles').select('is_super_admin').eq('user_id', userId).maybeSingle(),
+      uaAdmin.auth.admin.getUserById(userId),
+      dataAdmin.from('profiles').select('is_super_admin').eq('user_id', userId).maybeSingle(),
+      dataAdmin
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', userId)
+        .eq('org_id', orgId)
+        .maybeSingle(),
     ]);
 
     if (userError || !targetUserData?.user) {
@@ -107,10 +82,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Solo un superadmin puede asignar el rol de superadmin.' }, { status: 403 });
     }
 
-    const targetUser = targetUserData.user;
-    const targetOrgId = String(targetUser.app_metadata?.org_id ?? '');
-
-    if (targetOrgId && targetOrgId !== orgId) {
+    if (!membership) {
       return NextResponse.json({ error: ApiErrors.USER_NOT_IN_ORG }, { status: 400 });
     }
 
@@ -123,7 +95,7 @@ export async function POST(req: NextRequest) {
         : targetProfile?.is_super_admin === true,
     };
 
-    const { error: profileSaveError } = await supabaseAdmin
+    const { error: profileSaveError } = await dataAdmin
       .from('profiles')
       .upsert(profileUpdate, { onConflict: 'user_id' });
 
@@ -131,46 +103,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: profileSaveError.message || ApiErrors.SAVE_PROFILE }, { status: 500 });
     }
 
-    const { data: existingMember } = await supabaseAdmin
+    const { error: membershipError } = await dataAdmin
       .from('organization_members')
-      .select('user_id')
+      .update({ role: normalizedRole })
       .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('user_id', userId);
 
-    if (existingMember) {
-      const { error: membershipError } = await supabaseAdmin
-        .from('organization_members')
-        .update({ role })
-        .eq('org_id', orgId)
-        .eq('user_id', userId);
-
-      if (membershipError) {
-        return NextResponse.json({ error: membershipError.message || ApiErrors.SAVE_PROFILE }, { status: 500 });
-      }
-    } else {
-      const { error: membershipError } = await supabaseAdmin.from('organization_members').insert({
-        org_id: orgId,
-        user_id: userId,
-        role,
-        status: 'active',
-      });
-
-      if (membershipError) {
-        console.warn('organization_members insert skipped during update-user:', membershipError);
-      }
+    if (membershipError) {
+      return NextResponse.json({ error: membershipError.message || ApiErrors.SAVE_PROFILE }, { status: 500 });
     }
 
-    const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      app_metadata: {
-        ...targetUser.app_metadata,
-        org_id: targetOrgId || orgId,
-        role,
-      },
-    });
-
-    if (authUpdateError) {
-      return NextResponse.json({ error: authUpdateError.message || ApiErrors.SAVE_PROFILE }, { status: 500 });
+    const fullName = `${firstName} ${lastName}`.trim();
+    try {
+      const profileId = await ensureUaProfile(uaAdmin, userId, fullName);
+      await uaAdmin
+        .from('tenant_users')
+        .delete()
+        .eq('application_id', VOUCHEK_APPLICATION_ID)
+        .eq('tenant_id', orgId)
+        .eq('profile_id', profileId);
+      await assignTenantUser({
+        admin: uaAdmin,
+        profileId,
+        tenantId: orgId,
+        roleSlug: normalizedRole,
+      });
+    } catch (assignError: unknown) {
+      const message = assignError instanceof Error ? assignError.message : ApiErrors.SAVE_PROFILE;
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

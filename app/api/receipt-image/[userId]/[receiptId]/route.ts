@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { ApiErrors } from '@/lib/api-errors';
 import { getPortalContext } from '@/lib/portalContext';
 import { isOwnReceiptsOnly } from '@/lib/portal-access';
+import { getServerAccessToken } from '@/lib/server-auth-token';
 
 type ImageUrlResponse = {
   url?: string;
@@ -15,21 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ userId: string; receiptId: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-          },
-        },
-      }
-    );
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = await getServerAccessToken();
     if (!token) {
       return NextResponse.json({ error: ApiErrors.UNAUTHORIZED }, { status: 401 });
     }
@@ -69,7 +54,8 @@ export async function GET(
         'Cache-Control': 'private, max-age=60',
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || ApiErrors.FETCH_IMAGE }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : ApiErrors.FETCH_IMAGE;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

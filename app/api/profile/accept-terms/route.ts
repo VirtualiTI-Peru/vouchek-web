@@ -1,54 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { mapSupabaseError } from '@/lib/auth-errors';
+import { getApiAuthContext } from '@/lib/api-auth-context';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 import { resolveWebTermsDocument, termsVersionKey } from '@/lib/legal';
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return req.cookies.getAll();
-          },
-          setAll() {},
-        },
-      },
-    );
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { user, isSuperAdmin, role } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('is_super_admin')
-      .eq('user_id', user.id)
-      .single();
-
-    const isSuperAdmin = profile?.is_super_admin === true;
-    const role = String(user.app_metadata?.role ?? '');
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const body = await req.json().catch(() => ({} as { version?: string }));
     const doc = resolveWebTermsDocument(role, isSuperAdmin);
 
-    if (!doc) {
+    const version =
+      (typeof body?.version === 'string' && body.version.trim())
+      || (doc ? termsVersionKey(doc) : null);
+
+    if (!version) {
       return NextResponse.json({ success: true, skipped: true });
     }
 
-    const version = termsVersionKey(doc);
-    const { error } = await supabaseAdmin
+    const { error } = await dataAdmin
       .from('profiles')
       .update({
         terms_accepted_version: version,

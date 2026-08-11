@@ -1,13 +1,13 @@
 import { Resend } from 'resend';
+import { ROLE_LABELS, normalizeVouchekRole } from '@/lib/roles';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const ROLE_LABELS: Record<string, string> = {
-  'org:transportista': 'Transportista',
-  'org:verificador': 'Verificador',
-  'org:sistema': 'Administrador del Sistema',
-  'org:admin': 'Administrador',
-};
+function resolveRoleName(role: string): string {
+  const slug = normalizeVouchekRole(role);
+  if (slug && ROLE_LABELS[slug]) return ROLE_LABELS[slug];
+  return role;
+}
 
 function inviteHtml({ inviteLink, orgName, invitedBy, roleName }: {
   inviteLink: string; orgName: string; invitedBy: string; roleName: string;
@@ -173,7 +173,7 @@ export async function sendInviteEmail({ to, inviteLink, orgName, invitedBy, role
   invitedBy: string;
   role: string;
 }) {
-  const roleName = ROLE_LABELS[role] ?? role;
+  const roleName = resolveRoleName(role);
   return resend.emails.send({
     from: process.env.RESEND_SENDER_EMAIL!,
     to,
@@ -215,7 +215,7 @@ export async function sendWelcomeEmail({ to, setupLink, loginLink, orgName, firs
       orgName,
       firstName,
       temporaryPassword,
-      roleName: role ? (ROLE_LABELS[role] ?? role) : undefined,
+      roleName: role ? resolveRoleName(role) : undefined,
     }),
   });
 }

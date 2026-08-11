@@ -1,8 +1,9 @@
 import { TERMS_ADMINISTRADOR } from './terms-administrador';
 import { TERMS_VERIFICADOR } from './terms-verificador';
 import { termsVersionKey, type TermsBlock, type TermsDocument } from './types';
+import { VOUCHEK_ROLES, isVouchekRole } from '@/lib/roles';
 
-export type WebTermsRole = 'org:verificador' | 'org:admin' | 'org:sistema' | string;
+export type WebTermsRole = string;
 
 export function resolveWebTermsDocument(
   role: WebTermsRole | undefined,
@@ -10,8 +11,8 @@ export function resolveWebTermsDocument(
 ): TermsDocument | null {
   if (isSuperAdmin) return null;
 
-  if (role === 'org:verificador') return TERMS_VERIFICADOR;
-  if (role === 'org:admin' || role === 'org:sistema') return TERMS_ADMINISTRADOR;
+  if (isVouchekRole(role, VOUCHEK_ROLES.VERIFICADOR)) return TERMS_VERIFICADOR;
+  if (isVouchekRole(role, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA)) return TERMS_ADMINISTRADOR;
 
   return null;
 }

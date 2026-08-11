@@ -1,6 +1,6 @@
 'use client';
 
-import { createBrowserClient } from '@supabase/ssr';
+import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, LogOut, User } from 'lucide-react';
 import {
@@ -34,11 +34,7 @@ export function UserMenu({ user, displayName, onProfileClick }: UserMenuProps) {
 
   const handleSignOut = async () => {
     clearStoredWorkCustomerId();
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-    await supabase.auth.signOut();
+    await signOut({ redirect: false });
     router.push('/sign-in');
     router.refresh();
   };

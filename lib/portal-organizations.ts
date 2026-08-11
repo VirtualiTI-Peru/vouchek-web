@@ -1,33 +1,37 @@
-import { createClient } from '@supabase/supabase-js';
 import type { PortalContext } from '@/lib/portalContext';
 import type { PortalOrganization } from '@/lib/work-org';
+import { listUaTenants, listVouchekAssignedTenantIds } from '@/lib/universal-auth-api';
 
+/**
+ * Organizations for the portal shell = Universal Auth tenants with VouChek assigned
+ * (ApplicationTenants), regardless of trial/active/suspended status.
+ * SuperAdmin sees all assigned; others see their session tenant(s).
+ */
 export async function loadPortalOrganizations(ctx: PortalContext): Promise<PortalOrganization[]> {
-  try {
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    const { data: orgs } = await supabaseAdmin
-      .from('organizations')
-      .select('id, name')
-      .order('name', { ascending: true });
-
-    const allOrganizations = (orgs ?? []).map((organization: { id: string; name?: string | null }) => ({
-      id: organization.id,
-      name: organization.name ?? organization.id,
-    }));
-
-    if (!ctx.isSuperAdmin) {
-      const ownOrganization = allOrganizations.find((organization) => organization.id === ctx.orgId);
-      return ownOrganization
-        ? [ownOrganization]
-        : [{ id: ctx.orgId, name: ctx.orgId }];
+  if (!ctx.isSuperAdmin) {
+    if (ctx.orgId) {
+      return [{ id: ctx.orgId, name: ctx.orgId }];
     }
+    return [];
+  }
 
-    return allOrganizations;
+  try {
+    const [tenants, assignedIds] = await Promise.all([
+      listUaTenants(),
+      listVouchekAssignedTenantIds(),
+    ]);
+
+    return tenants
+      .filter((tenant) => assignedIds.has(tenant.id))
+      .map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name || tenant.code || tenant.id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   } catch {
+    if (ctx.orgId) {
+      return [{ id: ctx.orgId, name: ctx.orgId }];
+    }
     return [];
   }
 }

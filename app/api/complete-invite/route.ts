@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { isSupabaseDuplicateUserMessage, mapSupabaseError } from '@/lib/auth-errors';
 import { sendWelcomeEmail } from '@/lib/sendInviteEmail';
 import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
 import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import {
+  assignTenantUser,
+  ensureUaProfile,
+  getUniversalAuthAdmin,
+  normalizeCreateRole,
+} from '@/lib/universal-auth-admin';
 import { createHash } from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -21,13 +27,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, { status: 400 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
 
     const tokenHash = createHash('sha256').update(String(token)).digest('hex');
-    const { data: invitation, error: invitationError } = await supabaseAdmin
+    const { data: invitation, error: invitationError } = await dataAdmin
       .from('invitations')
       .select('id, org_id, email, role, expires_at, accepted_at')
       .eq('token_hash', tokenHash)
@@ -47,21 +51,19 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await assertCanAddOrganizationUser(supabaseAdmin, invitation.org_id, 1);
+      await assertCanAddOrganizationUser(dataAdmin, invitation.org_id, 1);
     } catch (limitError) {
       const response = organizationLimitErrorResponse(limitError);
       if (response) return response;
       throw limitError;
     }
 
-    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    const normalizedRole = normalizeCreateRole(invitation.role);
+
+    const { data: created, error: createError } = await uaAdmin.auth.admin.createUser({
       email: invitation.email,
       password,
       email_confirm: true,
-      app_metadata: {
-        org_id: invitation.org_id,
-        role: invitation.role,
-      },
     });
 
     if (createError || !created?.user) {
@@ -72,8 +74,23 @@ export async function POST(req: NextRequest) {
     }
 
     const user = created.user;
+    const fullName = `${String(firstName).trim()} ${String(lastName).trim()}`.trim();
 
-    const { error: profileError } = await supabaseAdmin
+    try {
+      const profileId = await ensureUaProfile(uaAdmin, user.id, fullName);
+      await assignTenantUser({
+        admin: uaAdmin,
+        profileId,
+        tenantId: invitation.org_id,
+        roleSlug: normalizedRole,
+      });
+    } catch (assignError: unknown) {
+      await uaAdmin.auth.admin.deleteUser(user.id);
+      const message = assignError instanceof Error ? assignError.message : ApiErrors.CREATE_USER;
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+
+    const { error: profileError } = await dataAdmin
       .from('profiles')
       .upsert(
         {
@@ -85,17 +102,17 @@ export async function POST(req: NextRequest) {
         { onConflict: 'user_id' }
       );
     if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(user.id);
+      await uaAdmin.auth.admin.deleteUser(user.id);
       return NextResponse.json({ error: mapSupabaseError(profileError.message) || ApiErrors.SAVE_PROFILE }, { status: 500 });
     }
 
-    const { error: membershipError } = await supabaseAdmin
+    const { error: membershipError } = await dataAdmin
       .from('organization_members')
       .upsert(
         {
           org_id: invitation.org_id,
           user_id: user.id,
-          role: invitation.role,
+          role: normalizedRole,
           status: 'active',
         },
         { onConflict: 'org_id,user_id' }
@@ -104,7 +121,7 @@ export async function POST(req: NextRequest) {
       console.warn('organization_members upsert skipped during invite completion:', membershipError);
     }
 
-    const { error: invitationUpdateError } = await supabaseAdmin
+    const { error: invitationUpdateError } = await dataAdmin
       .from('invitations')
       .update({ accepted_at: new Date().toISOString() })
       .eq('id', invitation.id);
@@ -115,7 +132,7 @@ export async function POST(req: NextRequest) {
     const orgId = invitation.org_id;
     let orgName = 'tu empresa';
     if (orgId) {
-      const { data: org } = await supabaseAdmin
+      const { data: org } = await dataAdmin
         .from('organizations')
         .select('name')
         .eq('id', orgId)
