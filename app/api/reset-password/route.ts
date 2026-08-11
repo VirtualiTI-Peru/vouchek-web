@@ -1,59 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiErrors } from '@/lib/api-errors';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { sendPasswordResetEmail } from '@/lib/sendInviteEmail';
-
-async function getAuthContext(req: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll() {},
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { user: null, isSuperAdmin: false, role: '', orgId: '' };
-  }
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_super_admin')
-    .eq('user_id', user.id)
-    .single();
-
-  return {
-    user,
-    isSuperAdmin: profile?.is_super_admin === true,
-    role: String(user.app_metadata?.role ?? ''),
-    orgId: String(user.app_metadata?.org_id ?? ''),
-  };
-}
+import { getApiAuthContext } from '@/lib/api-auth-context';
+import { isVouchekRole, VOUCHEK_ROLES } from '@/lib/roles';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import { getUniversalAuthAdmin } from '@/lib/universal-auth-admin';
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, isSuperAdmin, role, orgId: callerOrgId } = await getAuthContext(req);
+    const { user, isSuperAdmin, role, orgId: callerOrgId } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
-    if (!isSuperAdmin && role !== 'org:admin' && role !== 'org:sistema') {
+    if (!isSuperAdmin && !isVouchekRole(role, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA)) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
@@ -69,23 +30,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
 
-    const { data: targetUserData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const [{ data: targetUserData, error: userError }, { data: membership }] = await Promise.all([
+      uaAdmin.auth.admin.getUserById(userId),
+      dataAdmin
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', userId)
+        .eq('org_id', orgId)
+        .maybeSingle(),
+    ]);
 
     if (userError || !targetUserData?.user) {
       return NextResponse.json({ error: userError?.message || ApiErrors.USER_NOT_FOUND }, { status: 404 });
     }
 
-    const targetUser = targetUserData.user;
-    const targetOrgId = String(targetUser.app_metadata?.org_id ?? '');
-
-    if (targetOrgId && targetOrgId !== orgId) {
+    if (!membership) {
       return NextResponse.json({ error: ApiErrors.USER_NOT_IN_ORG }, { status: 400 });
     }
+
+    const targetUser = targetUserData.user;
 
     if (!targetUser.email) {
       return NextResponse.json({ error: ApiErrors.USER_EMAIL_NOT_FOUND }, { status: 400 });
@@ -99,9 +65,9 @@ export async function POST(req: NextRequest) {
       { data: profile },
       { data: linkData, error: linkError },
     ] = await Promise.all([
-      supabaseAdmin.from('organizations').select('name').eq('id', orgId).single(),
-      supabaseAdmin.from('profiles').select('first_name').eq('user_id', userId).single(),
-      supabaseAdmin.auth.admin.generateLink({
+      dataAdmin.from('organizations').select('name').eq('id', orgId).single(),
+      dataAdmin.from('profiles').select('first_name').eq('user_id', userId).single(),
+      uaAdmin.auth.admin.generateLink({
         type: 'recovery',
         email: targetUser.email,
         options: {
@@ -131,7 +97,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || ApiErrors.UNKNOWN }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,27 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { sendPasswordResetEmail } from '@/lib/sendInviteEmail';
+import { getApiAuthContext } from '@/lib/api-auth-context';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import { getUniversalAuthAdmin } from '@/lib/universal-auth-admin';
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return req.cookies.getAll();
-          },
-          setAll() {},
-        },
-      }
-    );
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { user, orgId } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
@@ -31,10 +17,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.USER_EMAIL_NOT_FOUND }, { status: 400 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
 
     const recoveryBaseUrl = process.env.INVITE_BASE_URL || req.nextUrl.origin;
 
@@ -43,14 +27,14 @@ export async function POST(req: NextRequest) {
       { data: orgMembership },
       { data: linkData, error: linkError },
     ] = await Promise.all([
-      supabaseAdmin.from('profiles').select('first_name').eq('user_id', user.id).single(),
-      supabaseAdmin
+      dataAdmin.from('profiles').select('first_name').eq('user_id', user.id).single(),
+      dataAdmin
         .from('organization_members')
         .select('org_id, organizations(name)')
         .eq('user_id', user.id)
         .limit(1)
         .single(),
-      supabaseAdmin.auth.admin.generateLink({
+      uaAdmin.auth.admin.generateLink({
         type: 'recovery',
         email: user.email,
         options: {
@@ -75,9 +59,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.PASSWORD_RESET_LINK }, { status: 500 });
     }
 
+    const orgRelation = orgMembership?.organizations as { name?: string } | { name?: string }[] | null | undefined;
     const orgName =
-      (orgMembership as any)?.organizations?.name ??
-      String(user.app_metadata?.org_id ?? 'VouChek');
+      (Array.isArray(orgRelation) ? orgRelation[0]?.name : orgRelation?.name)
+      ?? orgId
+      ?? 'VouChek';
 
     const emailResult = await sendPasswordResetEmail({
       to: user.email,
@@ -91,7 +77,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || ApiErrors.UNKNOWN }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

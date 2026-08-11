@@ -1,71 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { mapSupabaseError } from '@/lib/auth-errors';
+import { getApiAuthContext } from '@/lib/api-auth-context';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return req.cookies.getAll();
-          },
-          setAll() {},
-        },
-      }
-    );
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { user } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
 
-    const { data: profile, error } = await supabaseAdmin
+    const { data: profile, error } = await dataAdmin
       .from('profiles')
-      .select('first_name, last_name')
+      .select('first_name, last_name, terms_accepted_version')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: mapSupabaseError(error.message) }, { status: 500 });
     }
 
-    return NextResponse.json({ firstName: profile?.first_name ?? '', lastName: profile?.last_name ?? '' });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || ApiErrors.UNKNOWN }, { status: 500 });
+    return NextResponse.json({
+      firstName: profile?.first_name ?? '',
+      lastName: profile?.last_name ?? '',
+      termsAcceptedVersion: profile?.terms_accepted_version ?? null,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest) {
   try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return req.cookies.getAll();
-          },
-          setAll() {},
-        },
-      }
-    );
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { user } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
@@ -79,12 +51,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'firstName y lastName son obligatorios.' }, { status: 400 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
 
-    const { error } = await supabaseAdmin
+    const { error } = await dataAdmin
       .from('profiles')
       .update({ first_name: firstName, last_name: lastName })
       .eq('user_id', user.id);
@@ -94,7 +63,8 @@ export async function PATCH(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || ApiErrors.UNKNOWN }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

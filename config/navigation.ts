@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Receipt,
   Users,
-  Settings,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -36,12 +35,5 @@ export const navigationItems: NavItem[] = [
     icon: Users,
     description: 'Gestión de usuarios.',
     permission: 'admin',
-  },
-  {
-    label: 'Clientes',
-    href: '/configuration',
-    icon: Settings,
-    description: 'Gestión de clientes.',
-    permission: 'superadmin',
   },
 ];

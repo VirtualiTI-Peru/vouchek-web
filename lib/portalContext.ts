@@ -1,9 +1,9 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { auth } from '@/lib/auth';
 import { ApiErrors } from '@/lib/api-errors';
+import { normalizeVouchekRole, type VouchekRoleSlug } from '@/lib/roles';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 
-export type PortalRole = 'org:verificador' | 'org:admin' | string;
+export type PortalRole = VouchekRoleSlug | string;
 
 export type PortalContext = {
   userId: string;
@@ -16,58 +16,59 @@ export type PortalContext = {
 };
 
 export async function getPortalContext(): Promise<PortalContext> {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll(); },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-        },
-      },
+  const session = await auth();
+  if (!session?.userId && !session?.user?.email) {
+    throw new Error(ApiErrors.NOT_AUTHENTICATED);
+  }
+
+  const userId = session.userId ?? (session.user as { id?: string } | undefined)?.id;
+  if (!userId) {
+    throw new Error(ApiErrors.NOT_AUTHENTICATED);
+  }
+
+  const isSuperAdmin = session.isSuperAdmin === true;
+  const orgId = session.primaryTenantId?.trim() || session.tenantIds?.[0]?.trim() || '';
+  const role = normalizeVouchekRole(session.appRoleSlug ?? session.appRole) ?? undefined;
+  const email = session.user?.email ?? undefined;
+  const fullNameFromSession = session.user?.name?.trim() || undefined;
+
+  let termsAcceptedVersion: string | null = null;
+  let fullName = fullNameFromSession;
+  let profileSuperAdmin = false;
+
+  try {
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const { data: profile } = await dataAdmin
+      .from('profiles')
+      .select('first_name, last_name, is_super_admin, terms_accepted_version')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (profile) {
+      const firstName = profile.first_name ?? '';
+      const lastName = profile.last_name ?? '';
+      const composed = `${firstName} ${lastName}`.trim();
+      if (composed) fullName = composed;
+      profileSuperAdmin = profile.is_super_admin === true;
+      termsAcceptedVersion = profile.terms_accepted_version ?? null;
     }
-  );
+  } catch {
+    // Data plane optional during early UA cutover; JWT still drives access.
+  }
 
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (!user || error) throw new Error(ApiErrors.NOT_AUTHENTICATED);
+  const effectiveSuperAdmin = isSuperAdmin || profileSuperAdmin;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) throw new Error('Falta el token de autenticación');
-
-  const appMeta = user.app_metadata ?? {};
-  const email = user.email;
-  const orgId = (appMeta.org_id as string | undefined) ?? '';
-  const role = (appMeta.role as string | undefined) as PortalRole | undefined;
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('first_name, last_name, is_super_admin, terms_accepted_version')
-    .eq('user_id', user.id)
-    .single();
-
-  const firstName = profile?.first_name ?? '';
-  const lastName = profile?.last_name ?? '';
-  const fullName = `${firstName} ${lastName}`.trim() || undefined;
-  const isSuperAdmin = profile?.is_super_admin === true;
-
-  if (!orgId && !isSuperAdmin) {
+  if (!orgId && !effectiveSuperAdmin) {
     throw new Error('Falta la empresa asociada a tu cuenta');
   }
 
   return {
-    userId: user.id,
+    userId,
     orgId,
     email,
     role,
-    isSuperAdmin,
+    isSuperAdmin: effectiveSuperAdmin,
     fullName,
-    termsAcceptedVersion: profile?.terms_accepted_version ?? null,
+    termsAcceptedVersion,
   };
 }

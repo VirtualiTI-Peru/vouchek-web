@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { ApiErrors } from "@/lib/api-errors";
 import { mapSupabaseError } from "@/lib/auth-errors";
 import { sendInviteEmail } from "@/lib/sendInviteEmail";
@@ -8,6 +7,7 @@ import { organizationLimitErrorResponse } from '@/lib/organization-limit-respons
 import { canAccessOrganization, getApiAuthContext, isUuid } from '@/lib/api-auth-context';
 import { canManageUsers } from '@/lib/portal-access';
 import { enforceRateLimit } from '@/lib/rate-limit';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 import { createHash, randomBytes } from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -38,10 +38,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseAdmin = getVouchekDataSupabaseAdmin();
 
     const normalizedEmail = String(email).trim().toLowerCase();
 

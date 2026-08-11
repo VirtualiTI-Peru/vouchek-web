@@ -1,6 +1,4 @@
 
-import type { CookieOptions } from '@supabase/ssr';
-
 import { getPortalContext } from './portalContext';
 import { isOwnReceiptsOnly } from './portal-access';
 import type { Receipt, ReceiptPage, ReceiptSummary, Customer, ReceiptsSummaryByDate, TotalByUser } from './api-types';
@@ -383,23 +381,8 @@ function normalizeSkip(skip: number): number {
 }
 
 async function getAuthToken(): Promise<string> {
-  const { createServerClient } = await import('@supabase/ssr');
-  const { cookies } = await import('next/headers');
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll(); },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-        },
-      },
-    }
-  );
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const { getServerAccessToken } = await import('@/lib/server-auth-token');
+  const token = await getServerAccessToken();
   if (!token) throw new Error('Missing auth token');
   return token;
 }

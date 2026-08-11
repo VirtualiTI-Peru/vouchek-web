@@ -16,11 +16,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    // Default dark avoids FOUC without an inline <script> (Next 16 forbids scripts in React trees on client nav).
+    <html lang="es" className="dark" style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <body className="dashcode-app antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-          {children}
-        </ThemeProvider>
+        <ThemeProvider defaultTheme="dark">{children}</ThemeProvider>
       </body>
     </html>
   );

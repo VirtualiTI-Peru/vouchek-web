@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { AVAILABLE_ROLES as ROLE_OPTIONS, VOUCHEK_ROLES, normalizeVouchekRole } from '@/lib/roles';
 
 type Member = {
   id: string;
@@ -100,11 +101,12 @@ type BulkCreateResultRow = {
   error?: string;
 };
 
-const AVAILABLE_ROLES = [
-  { value: 'org:transportista', label: 'Transportista' },
-  { value: 'org:sistema', label: 'Administrador del Sistema' },
-  { value: 'org:verificador', label: 'Verificador' },
-];
+const AVAILABLE_ROLES = ROLE_OPTIONS.filter((r) =>
+  r.value === VOUCHEK_ROLES.TRANSPORTISTA
+  || r.value === VOUCHEK_ROLES.SISTEMA
+  || r.value === VOUCHEK_ROLES.VERIFICADOR
+  || r.value === VOUCHEK_ROLES.ADMIN,
+);
 
 function RoleSelect({
   value,
@@ -143,7 +145,7 @@ type InviteFormProps = {
 
 function InviteForm({ orgId, members, onInvited }: InviteFormProps) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('org:transportista');
+  const [role, setRole] = useState(VOUCHEK_ROLES.TRANSPORTISTA);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -220,7 +222,7 @@ function CreateUserModal({ open, orgId, onClose, onCompleted, onMessage }: Creat
   const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('org:transportista');
+  const [role, setRole] = useState(VOUCHEK_ROLES.TRANSPORTISTA);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -230,7 +232,7 @@ function CreateUserModal({ open, orgId, onClose, onCompleted, onMessage }: Creat
     setLastName('');
     setPassword('');
     setConfirmPassword('');
-    setRole('org:transportista');
+    setRole(VOUCHEK_ROLES.TRANSPORTISTA);
     setError('');
   };
 
@@ -397,7 +399,7 @@ function EditUserModal({
 }: EditUserModalProps) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [role, setRole] = useState('org:transportista');
+  const [role, setRole] = useState(VOUCHEK_ROLES.TRANSPORTISTA);
   const [isSuperAdminFlag, setIsSuperAdminFlag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -406,9 +408,9 @@ function EditUserModal({
     if (!open || !member) return;
     setFirstName(member.firstName ?? '');
     setLastName(member.lastName ?? '');
-    const memberRole = member.role ?? 'org:transportista';
+    const memberRole = normalizeVouchekRole(member.role) ?? VOUCHEK_ROLES.TRANSPORTISTA;
     setRole(
-      AVAILABLE_ROLES.some((r) => r.value === memberRole) ? memberRole : 'org:transportista',
+      AVAILABLE_ROLES.some((r) => r.value === memberRole) ? memberRole : VOUCHEK_ROLES.TRANSPORTISTA,
     );
     setIsSuperAdminFlag(member.isSuperAdmin === true);
     setError('');
@@ -569,7 +571,7 @@ async function parseCsvUsers(file: File) {
 }
 
 function BulkCreateModal({ open, orgId, onClose, onCompleted, onMessage }: BulkCreateModalProps) {
-  const [role, setRole] = useState('org:transportista');
+  const [role, setRole] = useState(VOUCHEK_ROLES.TRANSPORTISTA);
   const [autoGeneratePassword, setAutoGeneratePassword] = useState(true);
   const [rows, setRows] = useState<BulkUserRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -579,7 +581,7 @@ function BulkCreateModal({ open, orgId, onClose, onCompleted, onMessage }: BulkC
   const [results, setResults] = useState<BulkCreateResultRow[]>([]);
 
   const resetForm = () => {
-    setRole('org:transportista');
+    setRole(VOUCHEK_ROLES.TRANSPORTISTA);
     setAutoGeneratePassword(true);
     setRows([]);
     setCreationCompleted(false);
@@ -625,7 +627,7 @@ function BulkCreateModal({ open, orgId, onClose, onCompleted, onMessage }: BulkC
   };
 
   const downloadTemplate = () => {
-    const content = 'email,first_name,last_name,password,role\nusuario@correo.com,Nombre,Apellido,,org:transportista';
+    const content = 'email,first_name,last_name,password,role\nusuario@correo.com,Nombre,Apellido,,TRANSPORTISTA';
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

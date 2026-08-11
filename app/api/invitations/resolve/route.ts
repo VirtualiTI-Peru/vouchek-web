@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { ApiErrors } from "@/lib/api-errors";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { getVouchekDataSupabaseAdmin } from "@/lib/vouchek-data-supabase";
 
 export async function GET(req: NextRequest) {
   const rateLimited = enforceRateLimit(req, 'invitations-resolve', 30, 60 * 1000);
@@ -15,12 +15,9 @@ export async function GET(req: NextRequest) {
     }
 
     const tokenHash = createHash("sha256").update(token).digest("hex");
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
 
-    const { data: invitation, error } = await supabaseAdmin
+    const { data: invitation, error } = await dataAdmin
       .from("invitations")
       .select("id, email, role, org_id, expires_at, accepted_at")
       .eq("token_hash", tokenHash)
@@ -45,7 +42,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       email: invitation.email,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || ApiErrors.VALIDATE_INVITATION }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : ApiErrors.VALIDATE_INVITATION;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

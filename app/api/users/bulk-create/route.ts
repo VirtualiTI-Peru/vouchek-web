@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { ApiErrors } from '@/lib/api-errors';
 import { mapSupabaseError } from '@/lib/auth-errors';
 import { sendWelcomeEmail } from '@/lib/sendInviteEmail';
 import { assertCanAddOrganizationUser } from '@/lib/organization-limits';
 import { organizationLimitErrorResponse } from '@/lib/organization-limit-response';
+import { getApiAuthContext } from '@/lib/api-auth-context';
+import { isVouchekRole, normalizeVouchekRole, VOUCHEK_ROLES, type VouchekRoleSlug } from '@/lib/roles';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import {
+  assignTenantUser,
+  ensureUaProfile,
+  getUniversalAuthAdmin,
+  normalizeCreateRole,
+} from '@/lib/universal-auth-admin';
 
 type BulkUserInput = {
   email: string;
@@ -25,20 +32,7 @@ type BulkRowResult = {
   error?: string;
 };
 
-const ALLOWED_ROLES = new Set(['org:transportista', 'org:verificador', 'org:sistema', 'org:admin']);
-const ROLE_ALIASES: Record<string, string> = {
-  'org:transportista': 'org:transportista',
-  transportista: 'org:transportista',
-  'org:sistema': 'org:sistema',
-  sistema: 'org:sistema',
-  'administrador del sistema': 'org:sistema',
-  'admin del sistema': 'org:sistema',
-  'org:verificador': 'org:verificador',
-  verificador: 'org:verificador',
-  'org:admin': 'org:admin',
-  admin: 'org:admin',
-  administrador: 'org:admin',
-};
+const ALLOWED_ROLES = new Set<string>(Object.values(VOUCHEK_ROLES));
 
 const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
@@ -51,71 +45,35 @@ function generateSimplePassword(length = 10) {
   return out;
 }
 
-function normalizeRoleInput(input: string) {
+function normalizeRoleInput(input: string): VouchekRoleSlug | '' {
   const key = input
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
-  return ROLE_ALIASES[key] ?? '';
-}
 
-async function getAuthContext(req: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll() {},
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { user: null, isSuperAdmin: false, role: '', orgId: '' };
+  if (key === 'administrador del sistema' || key === 'admin del sistema') {
+    return VOUCHEK_ROLES.SISTEMA;
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_super_admin')
-    .eq('user_id', user.id)
-    .single();
-
-  return {
-    user,
-    isSuperAdmin: profile?.is_super_admin === true,
-    role: String(user.app_metadata?.role ?? ''),
-    orgId: String(user.app_metadata?.org_id ?? ''),
-  };
+  return normalizeVouchekRole(key) ?? '';
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, isSuperAdmin, role: callerRole, orgId: callerOrgId } = await getAuthContext(req);
+    const { user, isSuperAdmin, role: callerRole, orgId: callerOrgId } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
-    if (!isSuperAdmin && callerRole !== 'org:admin' && callerRole !== 'org:sistema') {
+    if (!isSuperAdmin && !isVouchekRole(callerRole, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA)) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
     const body = await req.json();
     const orgId = String(body?.orgId ?? '').trim();
-    const role = normalizeRoleInput(String(body?.role ?? 'org:transportista'));
+    const role = normalizeCreateRole(body?.role ?? VOUCHEK_ROLES.TRANSPORTISTA);
     const autoGeneratePassword = body?.autoGeneratePassword !== false;
     const users = Array.isArray(body?.users) ? (body.users as BulkUserInput[]) : [];
 
@@ -135,10 +93,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.FORBIDDEN_ORG }, { status: 403 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
 
     const prospectiveEmails = new Set<string>();
     let prospectiveCreates = 0;
@@ -153,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     if (prospectiveCreates > 0) {
       try {
-        await assertCanAddOrganizationUser(supabaseAdmin, orgId, prospectiveCreates);
+        await assertCanAddOrganizationUser(dataAdmin, orgId, prospectiveCreates);
       } catch (limitError) {
         const response = organizationLimitErrorResponse(limitError);
         if (response) return response;
@@ -164,7 +120,7 @@ export async function POST(req: NextRequest) {
     const recoveryBaseUrl = process.env.INVITE_BASE_URL || req.nextUrl.origin;
     const loginLink = `${recoveryBaseUrl}/sign-in`;
 
-    const { data: org } = await supabaseAdmin.from('organizations').select('name').eq('id', orgId).single();
+    const { data: org } = await dataAdmin.from('organizations').select('name').eq('id', orgId).single();
     const orgName = org?.name ?? orgId;
 
     const seenEmails = new Set<string>();
@@ -230,11 +186,10 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: created, error: createError } = await uaAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
-        app_metadata: { org_id: orgId, role: assignedRole },
       });
 
       if (createError || !created?.user) {
@@ -249,8 +204,31 @@ export async function POST(req: NextRequest) {
       }
 
       const userId = created.user.id;
+      const fullName = `${firstName} ${lastName}`.trim();
 
-      const { error: profileError } = await supabaseAdmin.from('profiles').upsert(
+      try {
+        const profileId = await ensureUaProfile(uaAdmin, userId, fullName);
+        await assignTenantUser({
+          admin: uaAdmin,
+          profileId,
+          tenantId: orgId,
+          roleSlug: assignedRole,
+        });
+      } catch (assignError: unknown) {
+        await uaAdmin.auth.admin.deleteUser(userId);
+        const message = assignError instanceof Error ? assignError.message : 'No se pudo asignar el usuario al tenant.';
+        results.push({
+          row: rowNumber,
+          email,
+          role: assignedRole,
+          success: false,
+          emailSent: false,
+          error: message,
+        });
+        continue;
+      }
+
+      const { error: profileError } = await dataAdmin.from('profiles').upsert(
         {
           user_id: userId,
           first_name: firstName,
@@ -261,7 +239,7 @@ export async function POST(req: NextRequest) {
       );
 
       if (profileError) {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
+        await uaAdmin.auth.admin.deleteUser(userId);
         results.push({
           row: rowNumber,
           email,
@@ -272,7 +250,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const { error: membershipError } = await supabaseAdmin.from('organization_members').upsert(
+      const { error: membershipError } = await dataAdmin.from('organization_members').upsert(
         {
           org_id: orgId,
           user_id: userId,
@@ -286,7 +264,7 @@ export async function POST(req: NextRequest) {
         console.warn('organization_members upsert skipped during bulk-create:', membershipError);
       }
 
-      const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+      const { data: linkData } = await uaAdmin.auth.admin.generateLink({
         type: 'recovery',
         email,
         options: {
@@ -348,7 +326,8 @@ export async function POST(req: NextRequest) {
       },
       results,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || ApiErrors.BULK_CREATE_USERS }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : ApiErrors.BULK_CREATE_USERS;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

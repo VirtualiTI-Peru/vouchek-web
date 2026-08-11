@@ -52,21 +52,35 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       type,
       size,
       color,
+      autoComplete,
       ...props
     },
     ref
-  ) =>
-    <div className="flex-1 w-full">
-      <input
-        type={type}
-        className={cn(
-          inputVariants({ color, size }),
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    </div>
+  ) => {
+    // Password managers (LastPass, 1Password) inject DOM before hydrate and break SSR.
+    // Ignore them on non-credential fields.
+    const isCredentialField = type === "password" || type === "email";
+    const ignorePasswordManagers = !isCredentialField;
+
+    return (
+      <div className="flex-1 w-full">
+        <input
+          type={type}
+          className={cn(
+            inputVariants({ color, size }),
+            className
+          )}
+          ref={ref}
+          autoComplete={autoComplete ?? (ignorePasswordManagers ? "off" : undefined)}
+          data-lpignore={ignorePasswordManagers ? "true" : undefined}
+          data-1p-ignore={ignorePasswordManagers ? "true" : undefined}
+          data-bwignore={ignorePasswordManagers ? "true" : undefined}
+          data-form-type={ignorePasswordManagers ? "other" : undefined}
+          {...props}
+        />
+      </div>
+    );
+  }
 );
 Input.displayName = "Input";
 

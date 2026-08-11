@@ -199,6 +199,12 @@ export default function DashboardSummary({
           <Label htmlFor="search">Buscar</Label>
           <Input
             id="search"
+            name="dashboard-user-search"
+            type="search"
+            autoComplete="off"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
             placeholder="Usuario, origen o total"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

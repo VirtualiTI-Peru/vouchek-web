@@ -1,6 +1,7 @@
 import { getPortalContext } from '@/lib/portalContext';
 import { canManageUsers } from '@/lib/portal-access';
-import { createClient } from '@supabase/supabase-js';
+import { isVouchekRole, VOUCHEK_ROLES } from '@/lib/roles';
+import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 import UsersTable from '@/app/components/UsersTable';
 
 export default async function AdminPage() {
@@ -15,26 +16,28 @@ export default async function AdminPage() {
 
   let organizations: { id: string; name: string }[] = [];
   try {
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseAdmin = getVouchekDataSupabaseAdmin();
     const { data: orgs } = await supabaseAdmin
       .from('organizations')
       .select('id, name')
       .order('name', { ascending: true });
-    organizations = (orgs ?? []).map((o: any) => ({ id: o.id, name: o.name ?? o.id }));
+    organizations = (orgs ?? []).map((o: { id: string; name?: string }) => ({
+      id: o.id,
+      name: o.name ?? o.id,
+    }));
     if (!ctx.isSuperAdmin) {
-      organizations = organizations.filter(o => o.id === ctx.orgId);
+      organizations = organizations.filter((o) => o.id === ctx.orgId);
     }
-  } catch { /* leave empty */ }
+  } catch {
+    /* leave empty */
+  }
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-default-900">Usuarios</h1>
       <UsersTable
         organizations={organizations}
-        showOrganizationSelector={!(ctx.role === 'org:sistema' && !ctx.isSuperAdmin)}
+        showOrganizationSelector={!(isVouchekRole(ctx.role, VOUCHEK_ROLES.SISTEMA) && !ctx.isSuperAdmin)}
         isSuperAdmin={ctx.isSuperAdmin}
       />
     </div>
