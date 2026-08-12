@@ -52,10 +52,21 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
+      # NEXT_PUBLIC_* se incrustan en el bundle en build time (standalone).
+      # Deben existir como Actions secrets; App Settings de Azure no alcanzan para el cliente.
       - name: Build Next.js
-        run: npm run build
+        run: |
+          if [ -z "${NEXT_PUBLIC_SUPABASE_URL}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY}" ]; then
+            echo "::error::Faltan secrets NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (Universal Auth)."
+            exit 1
+          fi
+          npm run build
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          VOUCHEK_APPLICATION_ID: ${{ secrets.VOUCHEK_APPLICATION_ID }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
 
       - name: Prepare standalone package
         run: |
