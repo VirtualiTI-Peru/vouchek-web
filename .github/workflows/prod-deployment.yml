@@ -9,6 +9,10 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -21,12 +25,20 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@virtualiti-peru'
 
       - name: Install dependencies
         run: npm ci
+        env:
+          # PAT with read:packages (SSO authorized for VirtualiTI-Peru if required).
+          # GITHUB_TOKEN alone only works if the package grants this repo access.
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Build Next.js
         run: npm run build
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Create deployment package
         run: |
