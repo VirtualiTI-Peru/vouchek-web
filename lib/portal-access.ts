@@ -5,7 +5,12 @@ export function canAccessOrgReports(ctx: PortalContext | null | undefined): bool
   if (!ctx) return false;
   return (
     ctx.isSuperAdmin ||
-    isVouchekRole(ctx.role, VOUCHEK_ROLES.SISTEMA, VOUCHEK_ROLES.VERIFICADOR, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.TRANSPORTISTA)
+    isVouchekRole(
+      ctx.role,
+      VOUCHEK_ROLES.SYSADMIN,
+      VOUCHEK_ROLES.VERIFICADOR,
+      VOUCHEK_ROLES.TRANSPORTISTA,
+    )
   );
 }
 
@@ -13,7 +18,7 @@ export function canSeeAllOrgReports(ctx: PortalContext | null | undefined): bool
   if (!ctx) return false;
   return (
     ctx.isSuperAdmin ||
-    isVouchekRole(ctx.role, VOUCHEK_ROLES.SISTEMA, VOUCHEK_ROLES.VERIFICADOR, VOUCHEK_ROLES.ADMIN)
+    isVouchekRole(ctx.role, VOUCHEK_ROLES.SYSADMIN, VOUCHEK_ROLES.VERIFICADOR)
   );
 }
 
@@ -23,13 +28,13 @@ export function isOwnReceiptsOnly(ctx: PortalContext | null | undefined): boolea
 }
 
 export function canManageUsers(ctx: PortalContext): boolean {
-  return ctx.isSuperAdmin || isVouchekRole(ctx.role, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA);
+  return ctx.isSuperAdmin || isVouchekRole(ctx.role, VOUCHEK_ROLES.SYSADMIN);
 }
 
 export function canViewOrgPlanUsage(ctx: PortalContext | null | undefined): boolean {
   if (!ctx) return false;
   return (
     ctx.isSuperAdmin ||
-    isVouchekRole(ctx.role, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA, VOUCHEK_ROLES.VERIFICADOR)
+    isVouchekRole(ctx.role, VOUCHEK_ROLES.SYSADMIN, VOUCHEK_ROLES.VERIFICADOR)
   );
 }

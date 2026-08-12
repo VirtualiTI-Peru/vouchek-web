@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import type { TermsBlock, TermsDocument } from '@/lib/legal';
+import { termsVersionKey, type TermsBlock, type TermsDocument } from '@/lib/legal';
 import { cn } from '@/lib/utils';
 import { clearStoredWorkCustomerId } from '@/lib/work-org';
 
@@ -80,7 +80,11 @@ export function TermsAcceptanceModal({ document, onAccepted }: TermsAcceptanceMo
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/profile/accept-terms', { method: 'POST' });
+      const res = await fetch('/api/profile/accept-terms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: termsVersionKey(document) }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data?.error ?? 'No se pudo registrar la aceptación.');

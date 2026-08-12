@@ -2,8 +2,7 @@
 export const VOUCHEK_ROLES = {
   TRANSPORTISTA: "TRANSPORTISTA",
   VERIFICADOR: "VERIFICADOR",
-  SISTEMA: "SISTEMA",
-  ADMIN: "ADMIN",
+  SYSADMIN: "SYSADMIN",
 } as const;
 
 export type VouchekRoleSlug = (typeof VOUCHEK_ROLES)[keyof typeof VOUCHEK_ROLES];
@@ -13,11 +12,14 @@ const LEGACY_TO_SLUG: Record<string, VouchekRoleSlug> = {
   transportista: VOUCHEK_ROLES.TRANSPORTISTA,
   "org:verificador": VOUCHEK_ROLES.VERIFICADOR,
   verificador: VOUCHEK_ROLES.VERIFICADOR,
-  "org:sistema": VOUCHEK_ROLES.SISTEMA,
-  sistema: VOUCHEK_ROLES.SISTEMA,
-  "org:admin": VOUCHEK_ROLES.ADMIN,
-  admin: VOUCHEK_ROLES.ADMIN,
-  administrador: VOUCHEK_ROLES.ADMIN,
+  "org:sysadmin": VOUCHEK_ROLES.SYSADMIN,
+  sysadmin: VOUCHEK_ROLES.SYSADMIN,
+  // Legacy admin roles → SYSADMIN
+  "org:sistema": VOUCHEK_ROLES.SYSADMIN,
+  sistema: VOUCHEK_ROLES.SYSADMIN,
+  "org:admin": VOUCHEK_ROLES.SYSADMIN,
+  admin: VOUCHEK_ROLES.SYSADMIN,
+  administrador: VOUCHEK_ROLES.SYSADMIN,
 };
 
 /** Normalize UA slug or legacy org:* role to a canonical slug. */
@@ -43,13 +45,11 @@ export function isVouchekRole(role: string | null | undefined, ...expected: Vouc
 export const ROLE_LABELS: Record<VouchekRoleSlug, string> = {
   TRANSPORTISTA: "Transportista",
   VERIFICADOR: "Verificador",
-  SISTEMA: "Administrador del Sistema",
-  ADMIN: "Administrador",
+  SYSADMIN: "Administrador del sistema",
 };
 
 export const AVAILABLE_ROLES: { value: VouchekRoleSlug; label: string }[] = [
   { value: VOUCHEK_ROLES.TRANSPORTISTA, label: ROLE_LABELS.TRANSPORTISTA },
-  { value: VOUCHEK_ROLES.SISTEMA, label: ROLE_LABELS.SISTEMA },
   { value: VOUCHEK_ROLES.VERIFICADOR, label: ROLE_LABELS.VERIFICADOR },
-  { value: VOUCHEK_ROLES.ADMIN, label: ROLE_LABELS.ADMIN },
+  { value: VOUCHEK_ROLES.SYSADMIN, label: ROLE_LABELS.SYSADMIN },
 ];

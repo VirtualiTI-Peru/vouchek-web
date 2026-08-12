@@ -58,11 +58,6 @@ function UsageMeter({
 }
 
 export default function OrganizationUsageWidget({ usage }: Props) {
-  const usersHint =
-    usage.pendingInvites > 0
-      ? `${usage.pendingInvites} invitación(es) pendiente(s) incluidas en el cupo.`
-      : undefined;
-
   const receiptsHint =
     usage.allowReceiptOverage
       ? 'Overage habilitado: los excedentes pueden generar cargo adicional.'
@@ -94,7 +89,6 @@ export default function OrganizationUsageWidget({ usage }: Props) {
             label="Usuarios"
             used={usage.usersReserved}
             max={usage.maxUsers}
-            hint={usersHint}
           />
           <UsageMeter
             label="Comprobantes este mes"

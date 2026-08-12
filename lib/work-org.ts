@@ -1,10 +1,17 @@
 export const WORK_CUSTOMER_ID_PARAM = 'customerId';
 const WORK_CUSTOMER_ID_STORAGE_KEY = 'vouchek.workCustomerId';
 
+/** Routes where the header organization switcher applies. */
+export const WORK_ORG_ROUTES = ['/dashboard', '/receipts', '/users'] as const;
+
 export type PortalOrganization = {
   id: string;
   name: string;
 };
+
+export function isWorkOrgRoute(pathname: string): boolean {
+  return WORK_ORG_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
 
 export function getStoredWorkCustomerId(): string | null {
   if (typeof window === 'undefined') {

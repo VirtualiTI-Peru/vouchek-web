@@ -1,5 +1,7 @@
 import { auth } from '@/lib/auth';
 import { ApiErrors } from '@/lib/api-errors';
+import { resolveWebTermsDocument, termsVersionKey } from '@/lib/legal';
+import { getAcceptedTermsVersion } from '@/lib/legal-api';
 import { normalizeVouchekRole, type VouchekRoleSlug } from '@/lib/roles';
 import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 
@@ -36,11 +38,18 @@ export async function getPortalContext(): Promise<PortalContext> {
   let fullName = fullNameFromSession;
   let profileSuperAdmin = false;
 
+  const termsDocument = resolveWebTermsDocument(role, isSuperAdmin);
+  const requiredTermsVersion = termsDocument ? termsVersionKey(termsDocument) : null;
+
+  if (requiredTermsVersion) {
+    termsAcceptedVersion = await getAcceptedTermsVersion(requiredTermsVersion);
+  }
+
   try {
     const dataAdmin = getVouchekDataSupabaseAdmin();
     const { data: profile } = await dataAdmin
       .from('profiles')
-      .select('first_name, last_name, is_super_admin, terms_accepted_version')
+      .select('first_name, last_name, is_super_admin')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -50,7 +59,6 @@ export async function getPortalContext(): Promise<PortalContext> {
       const composed = `${firstName} ${lastName}`.trim();
       if (composed) fullName = composed;
       profileSuperAdmin = profile.is_super_admin === true;
-      termsAcceptedVersion = profile.terms_accepted_version ?? null;
     }
   } catch {
     // Data plane optional during early UA cutover; JWT still drives access.
