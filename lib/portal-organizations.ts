@@ -1,3 +1,4 @@
+import { auth } from '@/lib/auth';
 import type { PortalContext } from '@/lib/portalContext';
 import type { PortalOrganization } from '@/lib/work-org';
 import { listUaTenants, listVouchekAssignedTenantIds } from '@/lib/universal-auth-api';
@@ -8,11 +9,16 @@ import { listUaTenants, listVouchekAssignedTenantIds } from '@/lib/universal-aut
  * SuperAdmin sees all assigned; others see their session tenant(s).
  */
 export async function loadPortalOrganizations(ctx: PortalContext): Promise<PortalOrganization[]> {
+  // Non-admins cannot call UA /Tenants admin APIs — use JWT session tenants for the name.
   if (!ctx.isSuperAdmin) {
-    if (ctx.orgId) {
-      return [{ id: ctx.orgId, name: ctx.orgId }];
+    if (!ctx.orgId) {
+      return [];
     }
-    return [];
+
+    const session = await auth();
+    const match = session?.tenants?.find((tenant) => tenant.customerId === ctx.orgId);
+    const name = match?.customerName?.trim() || ctx.orgId;
+    return [{ id: ctx.orgId, name }];
   }
 
   try {
@@ -29,9 +35,6 @@ export async function loadPortalOrganizations(ctx: PortalContext): Promise<Porta
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   } catch {
-    if (ctx.orgId) {
-      return [{ id: ctx.orgId, name: ctx.orgId }];
-    }
     return [];
   }
 }

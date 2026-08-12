@@ -100,6 +100,39 @@ export async function ensureApplicationTenant(
   }
 }
 
+/** True if the auth user is assigned to the tenant for VouChek in Universal Auth. */
+export async function getUaTenantMembership(params: {
+  admin: SupabaseClient;
+  userId: string;
+  tenantId: string;
+}): Promise<{ profileId: string; isSuperAdmin: boolean; fullName: string | null } | null> {
+  const { data: profile, error: profileError } = await params.admin
+    .from('profiles')
+    .select('id, is_super_admin, full_name')
+    .eq('user_id', params.userId)
+    .maybeSingle();
+
+  if (profileError) throw new Error(profileError.message);
+  if (!profile?.id) return null;
+
+  const { data: memberships, error: membershipError } = await params.admin
+    .from('tenant_users')
+    .select('profile_id')
+    .eq('application_id', VOUCHEK_APPLICATION_ID)
+    .eq('tenant_id', params.tenantId)
+    .eq('profile_id', profile.id)
+    .limit(1);
+
+  if (membershipError) throw new Error(membershipError.message);
+  if (!memberships?.length) return null;
+
+  return {
+    profileId: profile.id as string,
+    isSuperAdmin: profile.is_super_admin === true,
+    fullName: (profile.full_name as string | null) ?? null,
+  };
+}
+
 export async function assignTenantUser(params: {
   admin: SupabaseClient;
   profileId: string;

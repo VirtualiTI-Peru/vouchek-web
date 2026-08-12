@@ -12,7 +12,7 @@ export function resolveWebTermsDocument(
   if (isSuperAdmin) return null;
 
   if (isVouchekRole(role, VOUCHEK_ROLES.VERIFICADOR)) return TERMS_VERIFICADOR;
-  if (isVouchekRole(role, VOUCHEK_ROLES.ADMIN, VOUCHEK_ROLES.SISTEMA)) return TERMS_ADMINISTRADOR;
+  if (isVouchekRole(role, VOUCHEK_ROLES.SYSADMIN)) return TERMS_ADMINISTRADOR;
 
   return null;
 }

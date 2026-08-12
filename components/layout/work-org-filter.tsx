@@ -4,12 +4,13 @@ import { useEffect, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   clearStoredWorkCustomerId,
+  isWorkOrgRoute,
   resolveWorkCustomerId,
   setStoredWorkCustomerId,
   WORK_CUSTOMER_ID_PARAM,
   type PortalOrganization,
 } from '@/lib/work-org';
-import { isWorkDateRoute } from '@/lib/work-date';
+
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -50,7 +51,7 @@ export function WorkOrgFilter({
   );
 
   useEffect(() => {
-    if (!isWorkDateRoute(pathname)) {
+    if (!isWorkOrgRoute(pathname)) {
       return;
     }
 
@@ -103,7 +104,7 @@ export function WorkOrgFilter({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [fallbackCustomerId, isSuperAdmin, organizations, pathname, router, searchParams]);
 
-  if (!isWorkDateRoute(pathname) || organizations.length === 0) {
+  if (!isWorkOrgRoute(pathname) || organizations.length === 0) {
     return null;
   }
 
@@ -145,3 +146,4 @@ export function WorkOrgFilter({
     </div>
   );
 }
+

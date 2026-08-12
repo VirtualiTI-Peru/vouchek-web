@@ -1,4 +1,12 @@
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import "server-only";
+
+import {
+  isSubscriptionUsable,
+  resolveEffectiveSubscriptionStatus,
+  type VirtualitiCustomer,
+} from "@virtualiti-peru/universal-auth/core";
+import { auth } from "@/lib/auth";
+import { getVouchekEntitlementForTenant } from "@/lib/universal-auth-api";
 
 export type OrganizationAccessStatus = {
   blocked: boolean;
@@ -8,8 +16,83 @@ export type OrganizationAccessStatus = {
   demoExpired: boolean;
 };
 
-// Estado de acceso de una organización para el portal/app.
-// El acceso se bloquea si la empresa está inactiva o la suscripción/demo expiró.
+type EntitlementHint = {
+  status?: string | null;
+  planCode?: string | null;
+  trialEndsAt?: string | null;
+  isUsable?: boolean;
+};
+
+function fromHint(hint: EntitlementHint | null | undefined): OrganizationAccessStatus {
+  const fallback: OrganizationAccessStatus = {
+    blocked: false,
+    isActive: true,
+    subscriptionEndsAt: null,
+    demoEnabled: false,
+    demoExpired: false,
+  };
+
+  if (!hint) return fallback;
+
+  const status = hint.status ?? null;
+  const planCode = hint.planCode ?? null;
+  const trialEndsAt = hint.trialEndsAt ?? null;
+  const effective = resolveEffectiveSubscriptionStatus(status, trialEndsAt, new Date(), planCode);
+  const usable =
+    hint.isUsable !== undefined
+      ? hint.isUsable && (effective === "trial" || effective === "active")
+      : isSubscriptionUsable(status, trialEndsAt, planCode);
+  const isTrial = effective === "trial" || (planCode ?? "").toLowerCase() === "trial";
+  const trialExpired =
+    isTrial
+    && trialEndsAt != null
+    && !Number.isNaN(Date.parse(trialEndsAt))
+    && Date.now() > Date.parse(trialEndsAt);
+
+  return {
+    blocked: !usable || effective === "suspended" || effective === "cancelled",
+    isActive: usable,
+    subscriptionEndsAt: trialEndsAt,
+    demoEnabled: isTrial,
+    demoExpired: trialExpired,
+  };
+}
+
+async function resolveHint(
+  orgId: string,
+  isSuperAdmin: boolean,
+  sessionTenants: VirtualitiCustomer[] | undefined,
+): Promise<EntitlementHint | null> {
+  const fromSession = sessionTenants?.find((t) => t.customerId === orgId);
+  if (fromSession) {
+    return {
+      status: fromSession.status ?? null,
+      planCode: fromSession.planCode ?? null,
+      trialEndsAt: fromSession.trialEndsAt ?? null,
+    };
+  }
+
+  if (!isSuperAdmin) {
+    return null;
+  }
+
+  try {
+    const entitlement = await getVouchekEntitlementForTenant(orgId);
+    if (!entitlement) return null;
+    return {
+      status: entitlement.effectiveStatus ?? entitlement.status ?? null,
+      planCode: entitlement.planCode ?? null,
+      trialEndsAt: entitlement.trialEndsAt ?? null,
+      isUsable: entitlement.isUsable,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Portal access gate from Universal Auth subscription (trial/active/suspended).
+ */
 export async function getOrganizationAccessStatus(
   orgId: string,
 ): Promise<OrganizationAccessStatus> {
@@ -26,29 +109,15 @@ export async function getOrganizationAccessStatus(
   }
 
   try {
-    const supabaseAdmin = getVouchekDataSupabaseAdmin();
-    const { data, error } = await supabaseAdmin
-      .from('organizations')
-      .select('is_active, subscription_ends_at, demo_enabled')
-      .eq('id', orgId)
-      .single();
-
-    if (error || !data) {
+    const session = await auth();
+    if (session?.isSuperAdmin) {
       return fallback;
     }
 
-    const isActive = data.is_active === true;
-    const endsAt = data.subscription_ends_at ? new Date(data.subscription_ends_at) : null;
-    const expired = endsAt != null && endsAt.getTime() < Date.now();
-
-    return {
-      blocked: !isActive || expired,
-      isActive,
-      subscriptionEndsAt: data.subscription_ends_at ?? null,
-      demoEnabled: data.demo_enabled === true,
-      demoExpired: expired && data.demo_enabled === true,
-    };
-  } catch {
+    const hint = await resolveHint(orgId, session?.isSuperAdmin === true, session?.tenants);
+    return fromHint(hint);
+  } catch (error) {
+    console.error("organization access lookup failed:", error);
     return fallback;
   }
 }

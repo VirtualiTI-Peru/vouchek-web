@@ -2,23 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApiErrors } from '@/lib/api-errors';
 import { mapSupabaseError } from '@/lib/auth-errors';
 import { getApiAuthContext } from '@/lib/api-auth-context';
+import { resolveWebTermsDocument, termsVersionKey } from '@/lib/legal';
+import { getAcceptedTermsVersion } from '@/lib/legal-api';
 import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 
 export async function GET(req: NextRequest) {
   try {
-    const { user } = await getApiAuthContext(req);
+    const { user, isSuperAdmin, role } = await getApiAuthContext(req);
 
     if (!user) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
     const dataAdmin = getVouchekDataSupabaseAdmin();
+    const termsDocument = resolveWebTermsDocument(role, isSuperAdmin);
+    const requiredTermsVersion = termsDocument ? termsVersionKey(termsDocument) : null;
 
-    const { data: profile, error } = await dataAdmin
-      .from('profiles')
-      .select('first_name, last_name, terms_accepted_version')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const [{ data: profile, error }, termsAcceptedVersion] = await Promise.all([
+      dataAdmin
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      requiredTermsVersion
+        ? getAcceptedTermsVersion(requiredTermsVersion)
+        : Promise.resolve(null),
+    ]);
 
     if (error) {
       return NextResponse.json({ error: mapSupabaseError(error.message) }, { status: 500 });
@@ -27,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       firstName: profile?.first_name ?? '',
       lastName: profile?.last_name ?? '',
-      termsAcceptedVersion: profile?.terms_accepted_version ?? null,
+      termsAcceptedVersion,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;

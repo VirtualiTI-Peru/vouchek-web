@@ -196,12 +196,13 @@ export async function fetchReceiptsSummary(customerId: string, options: FetchRec
 }
 
 export async function fetchCustomers(): Promise<Customer[]> {
+  const { loadPortalOrganizations } = await import('@/lib/portal-organizations');
   const ctx = await getPortalContext();
-  const url = new URL('/api/customers', getApiBaseUrl());
-  if (ctx.isSuperAdmin) {
-    url.searchParams.set('superAdmin', 'true');
-  }
-  return apiFetch<Customer[]>(url);
+  const orgs = await loadPortalOrganizations(ctx);
+  return orgs.map((org) => ({
+    customerId: org.id,
+    customerName: org.name,
+  }));
 }
 
 export async function fetchReceiptsSummaryByDate(customerId: string, date: string, timezoneOffsetMinutes?: number): Promise<ReceiptsSummaryByDate> {

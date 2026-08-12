@@ -1,7 +1,7 @@
+import { Suspense } from 'react';
 import { getPortalContext } from '@/lib/portalContext';
 import { canManageUsers } from '@/lib/portal-access';
-import { isVouchekRole, VOUCHEK_ROLES } from '@/lib/roles';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import { loadPortalOrganizations } from '@/lib/portal-organizations';
 import UsersTable from '@/app/components/UsersTable';
 
 export default async function AdminPage() {
@@ -14,32 +14,28 @@ export default async function AdminPage() {
     );
   }
 
-  let organizations: { id: string; name: string }[] = [];
-  try {
-    const supabaseAdmin = getVouchekDataSupabaseAdmin();
-    const { data: orgs } = await supabaseAdmin
-      .from('organizations')
-      .select('id, name')
-      .order('name', { ascending: true });
-    organizations = (orgs ?? []).map((o: { id: string; name?: string }) => ({
-      id: o.id,
-      name: o.name ?? o.id,
-    }));
-    if (!ctx.isSuperAdmin) {
-      organizations = organizations.filter((o) => o.id === ctx.orgId);
-    }
-  } catch {
-    /* leave empty */
-  }
+  const organizations = await loadPortalOrganizations(ctx);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-default-900">Usuarios</h1>
-      <UsersTable
-        organizations={organizations}
-        showOrganizationSelector={!(isVouchekRole(ctx.role, VOUCHEK_ROLES.SISTEMA) && !ctx.isSuperAdmin)}
-        isSuperAdmin={ctx.isSuperAdmin}
-      />
+      {!ctx.orgId && !ctx.isSuperAdmin ? (
+        <p className="text-sm text-default-500">
+          No hay una organización activa en la sesión.
+        </p>
+      ) : organizations.length === 0 ? (
+        <p className="text-sm text-default-500">
+          No hay empresas con VouChek asignado.
+        </p>
+      ) : (
+        <Suspense fallback={<p className="text-sm text-default-500">Cargando usuarios…</p>}>
+          <UsersTable
+            organizations={organizations}
+            isSuperAdmin={ctx.isSuperAdmin}
+            ownOrgId={ctx.orgId}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
