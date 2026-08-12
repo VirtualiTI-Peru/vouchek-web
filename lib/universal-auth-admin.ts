@@ -4,14 +4,12 @@ import { normalizeVouchekRole, type VouchekRoleSlug } from '@/lib/roles';
 
 /** Universal Auth Supabase (identity + tenant_users). */
 export function getUniversalAuthAdmin(): SupabaseClient {
-  const url = process.env.SUPABASE_URL?.trim() || process.env.NEXT_PUBLIC_UA_SUPABASE_URL?.trim();
-  const serviceKey =
-    process.env.UNIVERSAL_AUTH_SERVICE_ROLE_KEY?.trim()
-    || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceKey = process.env.UNIVERSAL_AUTH_SERVICE_ROLE_KEY?.trim();
 
   if (!url || !serviceKey) {
     throw new Error(
-      'Falta SUPABASE_URL / UNIVERSAL_AUTH_SERVICE_ROLE_KEY para administrar usuarios en Universal Auth.',
+      'Falta NEXT_PUBLIC_SUPABASE_URL / UNIVERSAL_AUTH_SERVICE_ROLE_KEY para administrar usuarios en Universal Auth.',
     );
   }
 

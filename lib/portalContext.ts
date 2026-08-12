@@ -3,7 +3,6 @@ import { ApiErrors } from '@/lib/api-errors';
 import { resolveWebTermsDocument, termsVersionKey } from '@/lib/legal';
 import { getAcceptedTermsVersion } from '@/lib/legal-api';
 import { normalizeVouchekRole, type VouchekRoleSlug } from '@/lib/roles';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 
 export type PortalRole = VouchekRoleSlug | string;
 
@@ -32,12 +31,9 @@ export async function getPortalContext(): Promise<PortalContext> {
   const orgId = session.primaryTenantId?.trim() || session.tenantIds?.[0]?.trim() || '';
   const role = normalizeVouchekRole(session.appRoleSlug ?? session.appRole) ?? undefined;
   const email = session.user?.email ?? undefined;
-  const fullNameFromSession = session.user?.name?.trim() || undefined;
+  const fullName = session.user?.name?.trim() || undefined;
 
   let termsAcceptedVersion: string | null = null;
-  let fullName = fullNameFromSession;
-  let profileSuperAdmin = false;
-
   const termsDocument = resolveWebTermsDocument(role, isSuperAdmin);
   const requiredTermsVersion = termsDocument ? termsVersionKey(termsDocument) : null;
 
@@ -45,28 +41,7 @@ export async function getPortalContext(): Promise<PortalContext> {
     termsAcceptedVersion = await getAcceptedTermsVersion(requiredTermsVersion);
   }
 
-  try {
-    const dataAdmin = getVouchekDataSupabaseAdmin();
-    const { data: profile } = await dataAdmin
-      .from('profiles')
-      .select('first_name, last_name, is_super_admin')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (profile) {
-      const firstName = profile.first_name ?? '';
-      const lastName = profile.last_name ?? '';
-      const composed = `${firstName} ${lastName}`.trim();
-      if (composed) fullName = composed;
-      profileSuperAdmin = profile.is_super_admin === true;
-    }
-  } catch {
-    // Data plane optional during early UA cutover; JWT still drives access.
-  }
-
-  const effectiveSuperAdmin = isSuperAdmin || profileSuperAdmin;
-
-  if (!orgId && !effectiveSuperAdmin) {
+  if (!orgId && !isSuperAdmin) {
     throw new Error('Falta la empresa asociada a tu cuenta');
   }
 
@@ -75,7 +50,7 @@ export async function getPortalContext(): Promise<PortalContext> {
     orgId,
     email,
     role,
-    isSuperAdmin: effectiveSuperAdmin,
+    isSuperAdmin,
     fullName,
     termsAcceptedVersion,
   };

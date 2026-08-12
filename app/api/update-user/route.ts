@@ -3,7 +3,6 @@ import { ApiErrors } from '@/lib/api-errors';
 import { VOUCHEK_APPLICATION_ID } from '@/lib/auth';
 import { getApiAuthContext } from '@/lib/api-auth-context';
 import { isVouchekRole, normalizeVouchekRole, VOUCHEK_ROLES } from '@/lib/roles';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 import {
   assignTenantUser,
   ensureUaProfile,
@@ -103,28 +102,6 @@ export async function POST(req: NextRequest) {
     } catch (assignError: unknown) {
       const message = assignError instanceof Error ? assignError.message : ApiErrors.SAVE_PROFILE;
       return NextResponse.json({ error: message }, { status: 500 });
-    }
-
-    // Best-effort mirror to legacy data-plane tables (optional during UA cutover).
-    try {
-      const dataAdmin = getVouchekDataSupabaseAdmin();
-      await dataAdmin.from('profiles').upsert({
-        user_id: userId,
-        first_name: firstName,
-        last_name: lastName,
-        is_super_admin: nextIsSuperAdmin,
-      }, { onConflict: 'user_id' });
-
-      await dataAdmin
-        .from('organization_members')
-        .upsert({
-          org_id: orgId,
-          user_id: userId,
-          role: normalizedRole,
-          status: 'active',
-        }, { onConflict: 'org_id,user_id' });
-    } catch (syncError) {
-      console.warn('VouChek data-plane sync after update-user failed:', syncError);
     }
 
     return NextResponse.json({ success: true });

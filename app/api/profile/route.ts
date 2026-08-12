@@ -4,7 +4,18 @@ import { mapSupabaseError } from '@/lib/auth-errors';
 import { getApiAuthContext } from '@/lib/api-auth-context';
 import { resolveWebTermsDocument, termsVersionKey } from '@/lib/legal';
 import { getAcceptedTermsVersion } from '@/lib/legal-api';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import { ensureUaProfile, getUniversalAuthAdmin } from '@/lib/universal-auth-admin';
+
+function splitFullName(fullName?: string | null): { firstName: string; lastName: string } {
+  const trimmed = fullName?.trim() ?? '';
+  if (!trimmed) return { firstName: '', lastName: '' };
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,14 +25,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: ApiErrors.NOT_AUTHENTICATED }, { status: 401 });
     }
 
-    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
     const termsDocument = resolveWebTermsDocument(role, isSuperAdmin);
     const requiredTermsVersion = termsDocument ? termsVersionKey(termsDocument) : null;
 
     const [{ data: profile, error }, termsAcceptedVersion] = await Promise.all([
-      dataAdmin
+      uaAdmin
         .from('profiles')
-        .select('first_name, last_name')
+        .select('full_name')
         .eq('user_id', user.id)
         .maybeSingle(),
       requiredTermsVersion
@@ -33,9 +44,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: mapSupabaseError(error.message) }, { status: 500 });
     }
 
+    const { firstName, lastName } = splitFullName(profile?.full_name as string | undefined);
+
     return NextResponse.json({
-      firstName: profile?.first_name ?? '',
-      lastName: profile?.last_name ?? '',
+      firstName,
+      lastName,
       termsAcceptedVersion,
     });
   } catch (err: unknown) {
@@ -60,15 +73,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'firstName y lastName son obligatorios.' }, { status: 400 });
     }
 
-    const dataAdmin = getVouchekDataSupabaseAdmin();
+    const uaAdmin = getUniversalAuthAdmin();
+    const fullName = `${firstName} ${lastName}`.trim();
 
-    const { error } = await dataAdmin
-      .from('profiles')
-      .update({ first_name: firstName, last_name: lastName })
-      .eq('user_id', user.id);
-
-    if (error) {
-      return NextResponse.json({ error: mapSupabaseError(error.message) }, { status: 500 });
+    try {
+      await ensureUaProfile(uaAdmin, user.id, fullName);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : ApiErrors.SAVE_PROFILE;
+      return NextResponse.json({ error: mapSupabaseError(message) }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { auth, VOUCHEK_APPLICATION_ID } from '@/lib/auth';
 import { normalizeVouchekRole } from '@/lib/roles';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 
 export type ApiAuthContext = {
   user: { id: string; email?: string } | null;
@@ -32,11 +31,10 @@ function contextFromJwtPayload(
   userId: string,
   email: string | undefined,
   payload: Record<string, unknown>,
-  profileSuperAdmin: boolean,
 ): ApiAuthContext {
   const userMetadata = (payload.user_metadata ?? {}) as Record<string, unknown>;
   const virtualiti = (userMetadata.virtualiti ?? {}) as Record<string, unknown>;
-  const isSuperAdmin = virtualiti.is_super_admin === true || profileSuperAdmin;
+  const isSuperAdmin = virtualiti.is_super_admin === true;
   const applications = Array.isArray(virtualiti.applications) ? virtualiti.applications : [];
   const app = applications.find((item) => {
     const row = item as Record<string, unknown>;
@@ -56,20 +54,6 @@ function contextFromJwtPayload(
   };
 }
 
-async function loadProfileSuperAdmin(userId: string): Promise<boolean> {
-  try {
-    const dataAdmin = getVouchekDataSupabaseAdmin();
-    const { data: profile } = await dataAdmin
-      .from('profiles')
-      .select('is_super_admin')
-      .eq('user_id', userId)
-      .maybeSingle();
-    return profile?.is_super_admin === true;
-  } catch {
-    return false;
-  }
-}
-
 async function getBearerAuthContext(req: NextRequest): Promise<ApiAuthContext | null> {
   const header = req.headers.get('authorization') ?? req.headers.get('Authorization');
   if (!header?.toLowerCase().startsWith('bearer ')) return null;
@@ -77,8 +61,8 @@ async function getBearerAuthContext(req: NextRequest): Promise<ApiAuthContext | 
   const token = header.slice(7).trim();
   if (!token) return null;
 
-  const supabaseUrl = process.env.SUPABASE_URL?.trim();
-  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!supabaseUrl || !anonKey) return null;
 
   const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
@@ -104,8 +88,7 @@ async function getBearerAuthContext(req: NextRequest): Promise<ApiAuthContext | 
     };
   }
 
-  const profileSuperAdmin = await loadProfileSuperAdmin(authUser.id);
-  return contextFromJwtPayload(authUser.id, authUser.email, payload, profileSuperAdmin);
+  return contextFromJwtPayload(authUser.id, authUser.email, payload);
 }
 
 export async function getApiAuthContext(req?: NextRequest | unknown): Promise<ApiAuthContext> {
@@ -113,10 +96,9 @@ export async function getApiAuthContext(req?: NextRequest | unknown): Promise<Ap
   if (session) {
     const userId = session.userId ?? (session.user as { id?: string } | undefined)?.id;
     if (userId) {
-      const profileSuperAdmin = await loadProfileSuperAdmin(userId);
       return {
         user: { id: userId, email: session.user?.email ?? undefined },
-        isSuperAdmin: session.isSuperAdmin === true || profileSuperAdmin,
+        isSuperAdmin: session.isSuperAdmin === true,
         role: normalizeVouchekRole(session.appRoleSlug ?? session.appRole) ?? '',
         orgId: session.primaryTenantId?.trim() || session.tenantIds?.[0]?.trim() || '',
       };

@@ -3,8 +3,7 @@ import { ApiErrors } from '@/lib/api-errors';
 import { getApiAuthContext } from '@/lib/api-auth-context';
 import { canManageUsers } from '@/lib/portal-access';
 import { provisionVouchekUser } from '@/lib/universal-auth-api';
-import { getUniversalAuthAdmin, normalizeCreateRole } from '@/lib/universal-auth-admin';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
+import { normalizeCreateRole } from '@/lib/universal-auth-admin';
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,42 +52,6 @@ export async function POST(req: NextRequest) {
         },
         { status: provisioned.status >= 400 ? provisioned.status : 500 },
       );
-    }
-
-    // Best-effort sync to VouChek data plane (names / membership mirror).
-    try {
-      const profileId = provisioned.data.profileId;
-      if (profileId) {
-        const uaAdmin = getUniversalAuthAdmin();
-        const { data: uaProfile } = await uaAdmin
-          .from('profiles')
-          .select('user_id')
-          .eq('id', profileId)
-          .maybeSingle();
-
-        const newUserId = uaProfile?.user_id as string | undefined;
-        if (newUserId) {
-          const dataAdmin = getVouchekDataSupabaseAdmin();
-          await dataAdmin.from('profiles').upsert({
-            user_id: newUserId,
-            first_name: normalizedFirstName,
-            last_name: normalizedLastName,
-            is_super_admin: false,
-          }, { onConflict: 'user_id' });
-
-          const { error: membershipError } = await dataAdmin.from('organization_members').insert({
-            org_id: orgId,
-            user_id: newUserId,
-            role: normalizedRole,
-            status: 'active',
-          });
-          if (membershipError) {
-            console.warn('organization_members insert skipped during create-user:', membershipError.message);
-          }
-        }
-      }
-    } catch (syncError) {
-      console.warn('VouChek local profile sync after UA provision failed:', syncError);
     }
 
     return NextResponse.json({

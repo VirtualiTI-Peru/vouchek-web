@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApiErrors } from '@/lib/api-errors';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sendPasswordResetEmail } from '@/lib/sendInviteEmail';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 import { getUniversalAuthAdmin } from '@/lib/universal-auth-admin';
 
 const GENERIC_SUCCESS_MESSAGE =
   'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.';
+
+function firstNameFromFullName(fullName?: string | null): string {
+  const trimmed = fullName?.trim() ?? '';
+  if (!trimmed) return 'Usuario';
+  return trimmed.split(/\s+/)[0] || 'Usuario';
+}
 
 export async function POST(req: NextRequest) {
   const rateLimited = enforceRateLimit(req, 'forgot-password', 5, 15 * 60 * 1000);
@@ -21,7 +26,6 @@ export async function POST(req: NextRequest) {
     }
 
     const uaAdmin = getUniversalAuthAdmin();
-    const dataAdmin = getVouchekDataSupabaseAdmin();
 
     const { data: linkData, error: linkError } = await uaAdmin.auth.admin.generateLink({
       type: 'recovery',
@@ -46,25 +50,17 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = linkData.user.id;
-    const [{ data: profile }, { data: orgMembership }] = await Promise.all([
-      dataAdmin.from('profiles').select('first_name').eq('user_id', userId).maybeSingle(),
-      dataAdmin
-        .from('organization_members')
-        .select('org_id, organizations(name)')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-    const orgRelation = orgMembership?.organizations as { name?: string } | { name?: string }[] | null | undefined;
-    const orgName =
-      (Array.isArray(orgRelation) ? orgRelation[0]?.name : orgRelation?.name) ?? 'Vouchek';
+    const { data: profile } = await uaAdmin
+      .from('profiles')
+      .select('full_name')
+      .eq('user_id', userId)
+      .maybeSingle();
 
     await sendPasswordResetEmail({
       to: linkData.user.email,
       changePasswordLink: setupLink,
-      orgName,
-      firstName: profile?.first_name ?? 'Usuario',
+      orgName: 'Vouchek',
+      firstName: firstNameFromFullName(profile?.full_name as string | undefined),
     });
 
     return NextResponse.json({ message: GENERIC_SUCCESS_MESSAGE });

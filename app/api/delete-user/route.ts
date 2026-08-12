@@ -4,7 +4,6 @@ import { mapSupabaseError } from '@/lib/auth-errors';
 import { VOUCHEK_APPLICATION_ID } from '@/lib/auth';
 import { getApiAuthContext } from '@/lib/api-auth-context';
 import { isVouchekRole, VOUCHEK_ROLES } from '@/lib/roles';
-import { getVouchekDataSupabaseAdmin } from '@/lib/vouchek-data-supabase';
 import {
   getUaTenantMembership,
   getUniversalAuthAdmin,
@@ -64,17 +63,6 @@ export async function POST(req: NextRequest) {
       .eq('application_id', VOUCHEK_APPLICATION_ID)
       .eq('tenant_id', orgId)
       .eq('profile_id', membership.profileId);
-
-    // Best-effort legacy cleanup.
-    try {
-      const dataAdmin = getVouchekDataSupabaseAdmin();
-      await Promise.allSettled([
-        dataAdmin.from('organization_members').delete().eq('user_id', userId).eq('org_id', orgId),
-        dataAdmin.from('profiles').delete().eq('user_id', userId),
-      ]);
-    } catch (cleanupError) {
-      console.warn('VouChek data-plane cleanup after delete-user failed:', cleanupError);
-    }
 
     const { error: deleteAuthError } = await uaAdmin.auth.admin.deleteUser(userId);
 
