@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   // Local file: SDK — ensure Next/Turbopack compiles subpath exports.
   transpilePackages: ["@virtualiti-peru/universal-auth"],
   // Turbopack on Windows: absolute path aliases fail ("windows imports are not implemented yet").

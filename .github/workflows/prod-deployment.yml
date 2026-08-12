@@ -1,5 +1,5 @@
 # Deploy Next.js portal to Azure App Service (Production)
-# Build in CI so prod does not rely on Oryx/Kudu (SCM_DO_BUILD).
+# Build in CI and deploy standalone output — do NOT run Oryx npm install on App Service.
 
 name: Deploy to Production
 
@@ -34,8 +34,7 @@ jobs:
         run: |
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
             echo "::error::Falta el secret NODE_AUTH_TOKEN en este repo."
-            echo "Crea un PAT classic con read:packages, autoriza SSO para VirtualiTI-Peru,"
-            echo "y guárdalo como Actions secret NODE_AUTH_TOKEN."
+            echo "Crea un PAT classic con read:packages y guárdalo como Actions secret NODE_AUTH_TOKEN."
             exit 1
           fi
           code=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -43,8 +42,7 @@ jobs:
             "https://npm.pkg.github.com/@virtualiti-peru/universal-auth")
           if [ "$code" != "200" ]; then
             echo "::error::GitHub Packages respondió HTTP $code con NODE_AUTH_TOKEN."
-            echo "Si es 401: el PAT está mal, expiró, o falta Authorize SSO en VirtualiTI-Peru."
-            echo "PAT → https://github.com/settings/tokens → Configure SSO → Authorize VirtualiTI-Peru"
+            echo "El PAT está mal, expiró, o no tiene read:packages."
             exit 1
           fi
           echo "GitHub Packages auth OK (HTTP $code)."
@@ -59,11 +57,16 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
-      - name: Create deployment package
+      - name: Prepare standalone package
         run: |
-          zip -r deploy.zip . \
-            -x ".git/*" \
-            -x ".github/*"
+          mkdir -p "${{ runner.temp }}/deploy"
+          cp -r .next/standalone/. "${{ runner.temp }}/deploy/"
+          mkdir -p "${{ runner.temp }}/deploy/.next/static"
+          cp -r .next/static/. "${{ runner.temp }}/deploy/.next/static/"
+          if [ -d public ]; then
+            mkdir -p "${{ runner.temp }}/deploy/public"
+            cp -r public/. "${{ runner.temp }}/deploy/public/"
+          fi
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
@@ -72,4 +75,4 @@ jobs:
           app-name: vouchek
           slot-name: production
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_PROD }}
-          package: deploy.zip
+          package: ${{ runner.temp }}/deploy
