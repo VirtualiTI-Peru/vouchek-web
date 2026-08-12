@@ -44,7 +44,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AVAILABLE_ROLES as ROLE_OPTIONS, VOUCHEK_ROLES, normalizeVouchekRole } from '@/lib/roles';
+import { AVAILABLE_ROLES as ROLE_OPTIONS, VOUCHEK_ROLES, normalizeVouchekRole, type VouchekRoleSlug } from '@/lib/roles';
 
 type Member = {
   id: string;
@@ -75,13 +75,20 @@ function RoleSelect({
   roles = AVAILABLE_ROLES,
 }: {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: VouchekRoleSlug) => void;
   disabled?: boolean;
   className?: string;
-  roles?: { value: string; label: string }[];
+  roles?: { value: VouchekRoleSlug; label: string }[];
 }) {
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={(next) => {
+        const normalized = normalizeVouchekRole(next);
+        if (normalized) onChange(normalized);
+      }}
+      disabled={disabled}
+    >
       <SelectTrigger className={className ?? 'min-w-[220px]'}>
         <SelectValue placeholder="Seleccionar rol" />
       </SelectTrigger>
@@ -108,7 +115,7 @@ function CreateUserModal({ open, orgId, onClose, onCompleted, onMessage }: Creat
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [role, setRole] = useState(VOUCHEK_ROLES.TRANSPORTISTA);
+  const [role, setRole] = useState<VouchekRoleSlug>(VOUCHEK_ROLES.TRANSPORTISTA);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -257,7 +264,7 @@ function EditUserModal({
 }: EditUserModalProps) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [role, setRole] = useState(VOUCHEK_ROLES.TRANSPORTISTA);
+  const [role, setRole] = useState<VouchekRoleSlug>(VOUCHEK_ROLES.TRANSPORTISTA);
   const [isSuperAdminFlag, setIsSuperAdminFlag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
