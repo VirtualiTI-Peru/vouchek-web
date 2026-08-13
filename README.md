@@ -34,7 +34,8 @@ Required:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key
 - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role (server-only)
 - `API_BASE_URL`: base URL of the Vouchek WebApi, for example `https://localhost:7231`
-- `NEXT_PUBLIC_SUPERADMIN_EMAILS`: semicolon-separated superadmin email list
+- `AUTH_SECRET`: Auth.js / NextAuth secret
+- `VOUCHEK_APPLICATION_ID`: Universal Auth application UUID
 
 Optional:
 
