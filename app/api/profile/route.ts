@@ -34,7 +34,9 @@ export async function GET(req: NextRequest) {
 
     const uaAdmin = getUniversalAuthAdmin();
     const termsDocument = resolveWebTermsDocument(role, isSuperAdmin);
-    const requiredTermsVersion = termsDocument ? termsVersionKey(termsDocument) : null;
+    const requestedTermsVersion = req.nextUrl.searchParams.get('termsVersion')?.trim() || null;
+    const requiredTermsVersion =
+      requestedTermsVersion || (termsDocument ? termsVersionKey(termsDocument) : null);
     const accessToken = bearerFromRequest(req);
 
     const [{ data: profile, error }, termsAcceptedVersion] = await Promise.all([
