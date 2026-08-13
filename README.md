@@ -38,9 +38,7 @@ Required:
 
 Optional:
 
-- `INVITE_BASE_URL`: public base URL for invitation and password-recovery links (UAT: your `vouchek-uat-web` URL)
-- `RESEND_API_KEY`: required for invite / welcome / forgot-password emails
-- `RESEND_SENDER_EMAIL`: sender address used for transactional emails
+- `UNIVERSAL_AUTH_API_BASE_URL`: Universal Auth API (forgot/reset password, provisioning)
 - `RECEIPTS_CACHE_TTL_SECONDS`: server-side receipts page cache TTL in seconds, default `30`
 - `RECEIPTS_SUMMARY_CACHE_TTL_SECONDS`: receipts summary cache TTL in seconds, default `20`
 - `RECEIPTS_SUMMARY_BY_DATE_CACHE_TTL_SECONDS`: summary-by-date cache TTL in seconds, default `20`

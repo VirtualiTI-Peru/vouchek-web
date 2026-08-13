@@ -1,5 +1,6 @@
 import {
   createApiClient,
+  fetchWithRetry,
   getApiAccessToken,
 } from "@virtualiti-peru/universal-auth/next";
 import { VOUCHEK_APPLICATION_ID } from "@/lib/auth";
@@ -184,4 +185,113 @@ export async function sendVouchekPasswordReset(params: {
     message: typeof body?.message === "string" ? body.message : undefined,
     email: typeof body?.email === "string" ? body.email : undefined,
   };
+}
+
+const GENERIC_FORGOT_MESSAGE =
+  "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.";
+
+/**
+ * Public forgot-password (login). Proxies to Universal Auth
+ * `POST /api/auth/password-reset/forgot`. Reset UI is hosted by UniversalAuth.
+ *
+ * Prefer `requestForgotPassword` from `@virtualiti-peru/universal-auth` ≥ 0.2.2
+ * once that package version is installed.
+ */
+export async function requestVouchekForgotPassword(email: string): Promise<
+  | { ok: true; message: string }
+  | { ok: false; status: number; error: string }
+> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) {
+    return { ok: false, status: 400, error: "Email is required." };
+  }
+
+  const apiRoot = `${getUniversalAuthApiBaseUrl()}/api`;
+  let response: Response;
+  try {
+    response = await fetchWithRetry(`${apiRoot}/auth/password-reset/forgot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: normalized,
+        applicationId: VOUCHEK_APPLICATION_ID,
+      }),
+      cache: "no-store",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network error";
+    return { ok: false, status: 0, error: message };
+  }
+
+  const body = (await response.json().catch(() => ({}))) as {
+    message?: string;
+    error?: string;
+  };
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      error:
+        (typeof body.message === "string" && body.message) ||
+        (typeof body.error === "string" && body.error) ||
+        `No se pudo solicitar el restablecimiento (${response.status}).`,
+    };
+  }
+
+  return {
+    ok: true,
+    message:
+      typeof body.message === "string" && body.message
+        ? body.message
+        : GENERIC_FORGOT_MESSAGE,
+  };
+}
+
+/** Authenticated self-service reset via Universal Auth API. */
+export async function requestVouchekSelfPasswordReset(): Promise<
+  | { ok: true }
+  | { ok: false; status: number; error: string }
+> {
+  const tokenResult = await getApiAccessToken();
+  if (!tokenResult.ok) {
+    return { ok: false, status: 401, error: tokenResult.error };
+  }
+
+  const apiRoot = `${getUniversalAuthApiBaseUrl()}/api`;
+  let response: Response;
+  try {
+    response = await fetchWithRetry(`${apiRoot}/auth/password-reset/request`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokenResult.token}`,
+      },
+      body: JSON.stringify({
+        applicationId: VOUCHEK_APPLICATION_ID,
+        applicationName: "VouChek",
+      }),
+      cache: "no-store",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network error";
+    return { ok: false, status: 0, error: message };
+  }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+      error?: string;
+    };
+    return {
+      ok: false,
+      status: response.status,
+      error:
+        (typeof body.message === "string" && body.message) ||
+        (typeof body.error === "string" && body.error) ||
+        `No se pudo enviar el restablecimiento (${response.status}).`,
+    };
+  }
+
+  return { ok: true };
 }
