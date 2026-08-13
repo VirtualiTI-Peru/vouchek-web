@@ -16,11 +16,23 @@ function getApiBaseUrl(): string {
   return baseUrl;
 }
 
-async function legalFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await getServerAccessToken();
-  if (!token) {
+async function resolveAccessToken(accessToken?: string | null): Promise<string> {
+  const fromCaller = accessToken?.trim();
+  if (fromCaller) return fromCaller;
+
+  const fromSession = await getServerAccessToken();
+  if (!fromSession) {
     throw new Error("Missing auth token");
   }
+  return fromSession;
+}
+
+async function legalFetch<T>(
+  path: string,
+  init?: RequestInit,
+  accessToken?: string | null,
+): Promise<T> {
+  const token = await resolveAccessToken(accessToken);
 
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -40,12 +52,17 @@ async function legalFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function getAcceptedTermsVersion(versionKey: string): Promise<string | null> {
+export async function getAcceptedTermsVersion(
+  versionKey: string,
+  accessToken?: string | null,
+): Promise<string | null> {
   if (!versionKey.trim()) return null;
 
   try {
     const data = await legalFetch<LegalEstadoResponse>(
       `/api/legal/estado?version=${encodeURIComponent(versionKey.trim())}`,
+      undefined,
+      accessToken,
     );
     return data.accepted && data.version ? data.version : null;
   } catch (error) {
@@ -54,11 +71,18 @@ export async function getAcceptedTermsVersion(versionKey: string): Promise<strin
   }
 }
 
-export async function acceptTermsVersion(versionKey: string): Promise<{ version: string }> {
-  const data = await legalFetch<{ success?: boolean; version?: string }>("/api/legal/terminos", {
-    method: "POST",
-    body: JSON.stringify({ version: versionKey.trim() }),
-  });
+export async function acceptTermsVersion(
+  versionKey: string,
+  accessToken?: string | null,
+): Promise<{ version: string }> {
+  const data = await legalFetch<{ success?: boolean; version?: string }>(
+    "/api/legal/terminos",
+    {
+      method: "POST",
+      body: JSON.stringify({ version: versionKey.trim() }),
+    },
+    accessToken,
+  );
 
   if (!data.version) {
     throw new Error("No se pudo guardar la aceptación de términos.");

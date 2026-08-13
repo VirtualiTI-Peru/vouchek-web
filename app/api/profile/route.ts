@@ -17,6 +17,13 @@ function splitFullName(fullName?: string | null): { firstName: string; lastName:
   };
 }
 
+function bearerFromRequest(req: NextRequest): string | null {
+  const header = req.headers.get('authorization') ?? req.headers.get('Authorization');
+  if (!header?.toLowerCase().startsWith('bearer ')) return null;
+  const token = header.slice(7).trim();
+  return token || null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { user, isSuperAdmin, role } = await getApiAuthContext(req);
@@ -28,6 +35,7 @@ export async function GET(req: NextRequest) {
     const uaAdmin = getUniversalAuthAdmin();
     const termsDocument = resolveWebTermsDocument(role, isSuperAdmin);
     const requiredTermsVersion = termsDocument ? termsVersionKey(termsDocument) : null;
+    const accessToken = bearerFromRequest(req);
 
     const [{ data: profile, error }, termsAcceptedVersion] = await Promise.all([
       uaAdmin
@@ -36,7 +44,7 @@ export async function GET(req: NextRequest) {
         .eq('user_id', user.id)
         .maybeSingle(),
       requiredTermsVersion
-        ? getAcceptedTermsVersion(requiredTermsVersion)
+        ? getAcceptedTermsVersion(requiredTermsVersion, accessToken)
         : Promise.resolve(null),
     ]);
 

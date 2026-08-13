@@ -91,7 +91,23 @@ async function getBearerAuthContext(req: NextRequest): Promise<ApiAuthContext | 
   return contextFromJwtPayload(authUser.id, authUser.email, payload);
 }
 
+function hasBearerHeader(req: NextRequest): boolean {
+  const header = req.headers.get('authorization') ?? req.headers.get('Authorization');
+  return Boolean(header?.toLowerCase().startsWith('bearer '));
+}
+
 export async function getApiAuthContext(req?: NextRequest | unknown): Promise<ApiAuthContext> {
+  // Mobile / API clients send Bearer without NextAuth cookies. Prefer that path
+  // first so we never block on `auth()` session resolution.
+  if (req && typeof req === 'object' && req !== null && 'headers' in req) {
+    const nextReq = req as NextRequest;
+    if (hasBearerHeader(nextReq)) {
+      const bearer = await getBearerAuthContext(nextReq);
+      if (bearer?.user) return bearer;
+      return { user: null, isSuperAdmin: false, role: '', orgId: '' };
+    }
+  }
+
   const session = await auth();
   if (session) {
     const userId = session.userId ?? (session.user as { id?: string } | undefined)?.id;
@@ -103,11 +119,6 @@ export async function getApiAuthContext(req?: NextRequest | unknown): Promise<Ap
         orgId: session.primaryTenantId?.trim() || session.tenantIds?.[0]?.trim() || '',
       };
     }
-  }
-
-  if (req && typeof req === 'object' && req !== null && 'headers' in req) {
-    const bearer = await getBearerAuthContext(req as NextRequest);
-    if (bearer?.user) return bearer;
   }
 
   return { user: null, isSuperAdmin: false, role: '', orgId: '' };

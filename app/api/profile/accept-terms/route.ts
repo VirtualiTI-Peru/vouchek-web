@@ -4,6 +4,13 @@ import { getApiAuthContext } from '@/lib/api-auth-context';
 import { resolveWebTermsDocument, termsVersionKey } from '@/lib/legal';
 import { acceptTermsVersion } from '@/lib/legal-api';
 
+function bearerFromRequest(req: NextRequest): string | null {
+  const header = req.headers.get('authorization') ?? req.headers.get('Authorization');
+  if (!header?.toLowerCase().startsWith('bearer ')) return null;
+  const token = header.slice(7).trim();
+  return token || null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { user, isSuperAdmin, role } = await getApiAuthContext(req);
@@ -23,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, skipped: true });
     }
 
-    const saved = await acceptTermsVersion(version);
+    const saved = await acceptTermsVersion(version, bearerFromRequest(req));
     return NextResponse.json({ success: true, version: saved.version });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : ApiErrors.UNKNOWN;
