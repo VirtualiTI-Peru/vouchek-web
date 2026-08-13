@@ -15,10 +15,21 @@ function isPublicRoute(pathname: string) {
 	return PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
 }
 
+function hasBearerAuthorization(request: NextRequest) {
+	const header = request.headers.get('authorization') ?? request.headers.get('Authorization')
+	return Boolean(header?.toLowerCase().startsWith('bearer '))
+}
+
 export async function proxy(request: NextRequest) {
 	const pathname = request.nextUrl.pathname
 
 	if (isPublicRoute(pathname)) {
+		return NextResponse.next({ request })
+	}
+
+	// Mobile clients call /api/* with Supabase Bearer (no NextAuth cookie).
+	// Do not redirect those to /sign-in HTML — that breaks JSON clients.
+	if (pathname.startsWith('/api/') && hasBearerAuthorization(request)) {
 		return NextResponse.next({ request })
 	}
 
