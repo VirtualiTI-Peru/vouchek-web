@@ -20,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!ctx.isSuperAdmin && ctx.orgId) {
     const access = await getOrganizationAccessStatus(ctx.orgId);
     if (access.blocked) {
-      redirect('/cuenta-suspendida');
+      redirect(access.overdueInvoice ? "/cuenta-suspendida?motivo=factura" : "/cuenta-suspendida");
     }
   }
 
