@@ -19,6 +19,9 @@ export type UaEntitlementLimits = {
   maxClients?: number | null;
   maxUsers?: number | null;
   maxReceipts?: number | null;
+  includedClients?: number | null;
+  includedUsers?: number | null;
+  includedReceipts?: number | null;
 };
 
 export type UaApplicationTenant = {

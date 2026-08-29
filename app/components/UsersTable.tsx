@@ -45,6 +45,9 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AVAILABLE_ROLES as ROLE_OPTIONS, VOUCHEK_ROLES, normalizeVouchekRole, type VouchekRoleSlug } from '@/lib/roles';
+import ExtraSeatConfirmDialog from '@/components/extra-seat-confirm-dialog';
+import { EXTRA_USER_PEN } from '@/lib/plans';
+import type { OrganizationUsage } from '@/lib/organization-limits';
 
 type Member = {
   id: string;
@@ -425,6 +428,8 @@ export default function UsersTable({
   const [deletingUserId, setDeletingUserId] = useState('');
   const [membersMessage, setMembersMessage] = useState('');
   const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
+  const [extraConfirmOpen, setExtraConfirmOpen] = useState(false);
+  const [usage, setUsage] = useState<OrganizationUsage | null>(null);
   const [editUserModal, setEditUserModal] = useState<{ open: boolean; member: Member | null }>({
     open: false,
     member: null,
@@ -437,16 +442,25 @@ export default function UsersTable({
   const loadMembers = async (orgId: string) => {
     setLoadingMembers(true);
     try {
-      const res = await fetch(`/api/org-members?orgId=${orgId}`);
-      const data = await res.json();
+      const [membersRes, usageRes] = await Promise.all([
+        fetch(`/api/org-members?orgId=${orgId}`),
+        fetch(`/api/organizations/${encodeURIComponent(orgId)}/usage`, { cache: 'no-store' }),
+      ]);
+      const data = await membersRes.json();
       if (Array.isArray(data)) {
         setMembers(data);
       } else {
         setMembers([]);
       }
+      if (usageRes.ok) {
+        setUsage((await usageRes.json()) as OrganizationUsage);
+      } else {
+        setUsage(null);
+      }
     } catch (error) {
       console.error('Error loading members:', error);
       setMembers([]);
+      setUsage(null);
     } finally {
       setLoadingMembers(false);
     }
@@ -543,6 +557,23 @@ export default function UsersTable({
   const selectedOrgName =
     organizations.find((org) => org.id === selectedOrg)?.name ?? selectedOrg;
 
+  const usedUsers = Math.max(filteredMembers.length, usage?.usersReserved ?? 0);
+  const atHardCap =
+    usage?.isTrial === true
+    && usage.maxUsers != null
+    && usedUsers >= usage.maxUsers;
+  const willAddExtraUser =
+    usage != null && !usage.isTrial && usedUsers >= usage.includedUsers;
+
+  const requestCreateUser = () => {
+    if (!selectedOrg || atHardCap) return;
+    if (willAddExtraUser) {
+      setExtraConfirmOpen(true);
+      return;
+    }
+    setCreateUserModalOpen(true);
+  };
+
   return (
     <>
       <p className="mb-4 text-sm text-default-500">
@@ -556,8 +587,24 @@ export default function UsersTable({
         </Alert>
       )}
 
-      <div className="mb-4 flex flex-wrap justify-end gap-2">
-        <Button onClick={() => setCreateUserModalOpen(true)} disabled={!selectedOrg}>
+      {atHardCap && usage ? (
+        <Alert color="warning" variant="soft" className="mb-4">
+          <AlertDescription>
+            Se alcanzó el límite de usuarios del periodo de prueba ({usedUsers} de {usage.maxUsers}).
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        {usage ? (
+          <p className="text-xs text-default-500">
+            {usedUsers} usuarios · {Math.min(usedUsers, usage.includedUsers)} incluidos · {Math.max(0, usedUsers - usage.includedUsers)} adicionales
+            {usage.planTier ? ` (plan ${usage.planTier})` : ''}
+          </p>
+        ) : (
+          <span />
+        )}
+        <Button onClick={requestCreateUser} disabled={!selectedOrg || atHardCap}>
           Crear Usuario
         </Button>
       </div>
@@ -686,6 +733,14 @@ export default function UsersTable({
           }
         }}
         onMessage={(message) => setMembersMessage(message)}
+      />
+
+      <ExtraSeatConfirmDialog
+        open={extraConfirmOpen}
+        onOpenChange={setExtraConfirmOpen}
+        title="Usuario adicional"
+        description={`Este usuario se sumará a la próxima factura (S/ ${EXTRA_USER_PEN} + IGV).`}
+        onAccept={() => setCreateUserModalOpen(true)}
       />
 
       <AlertDialog

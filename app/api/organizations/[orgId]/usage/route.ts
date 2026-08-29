@@ -3,12 +3,20 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import type { VirtualitiCustomer } from '@virtualiti-peru/universal-auth/core';
 import { ApiErrors } from '@/lib/api-errors';
-import { auth } from '@/lib/auth';
+import { auth, VOUCHEK_APPLICATION_ID } from '@/lib/auth';
 import { canAccessOrganization, getApiAuthContext } from '@/lib/api-auth-context';
 import { canViewOrgPlanUsage } from '@/lib/portal-access';
 import type { OrganizationUsage } from '@/lib/organization-limits';
-import type { PlanTier } from '@/lib/plans';
+import {
+  extraCount,
+  isTrialPlan,
+  PAID_INCLUDED_RECEIPTS,
+  PAID_INCLUDED_USERS,
+  STANDARD_FEE_PEN,
+  type PlanTier,
+} from '@/lib/plans';
 import { getServerAccessToken } from '@/lib/server-auth-token';
+import { getUniversalAuthAdmin } from '@/lib/universal-auth-admin';
 import { getVouchekEntitlementForTenant } from '@/lib/universal-auth-api';
 
 type AzureCustomerUsage = {
@@ -23,26 +31,44 @@ type EntitlementSnapshot = {
   effectiveStatus: string | null;
   isUsable: boolean;
   trialEndsAt: string | null;
-  maxUsers: number;
-  maxReceipts: number;
+  maxUsers: number | null;
+  maxReceipts: number | null;
+  includedUsers: number | null;
+  includedReceipts: number | null;
 };
 
-function currentPeriodKey(now = new Date()): string {
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
+function limaPeriodKey(now = new Date()): { periodKey: string; year: number; month: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+  const year = Number(parts.find((p) => p.type === 'year')?.value ?? now.getUTCFullYear());
+  const month = Number(parts.find((p) => p.type === 'month')?.value ?? now.getUTCMonth() + 1);
+  return {
+    year,
+    month,
+    periodKey: `${year}-${String(month).padStart(2, '0')}`,
+  };
+}
+
+function readOptionalInt(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function fromSessionTenant(tenant: VirtualitiCustomer): EntitlementSnapshot {
   const status = tenant.status ?? null;
+  const limits = (tenant.limits ?? {}) as Record<string, unknown>;
   return {
     planCode: tenant.planCode ?? null,
     status,
     effectiveStatus: status,
     isUsable: (status ?? '').toLowerCase() === 'active' || (status ?? '').toLowerCase() === 'trial',
     trialEndsAt: tenant.trialEndsAt ?? null,
-    maxUsers: tenant.limits?.maxUsers ?? 0,
-    maxReceipts: tenant.limits?.maxReceipts ?? 0,
+    maxUsers: readOptionalInt(limits.maxUsers ?? limits.max_users),
+    maxReceipts: readOptionalInt(limits.maxReceipts ?? limits.max_receipts),
+    includedUsers: readOptionalInt(limits.includedUsers ?? limits.included_users),
+    includedReceipts: readOptionalInt(limits.includedReceipts ?? limits.included_receipts),
   };
 }
 
@@ -51,44 +77,47 @@ async function resolveEntitlement(
   isSuperAdmin: boolean,
   sessionTenants: VirtualitiCustomer[] | undefined,
 ): Promise<EntitlementSnapshot | null> {
+  try {
+    const entitlement = await getVouchekEntitlementForTenant(orgId);
+    if (entitlement) {
+      return {
+        planCode: entitlement.planCode ?? null,
+        status: entitlement.status ?? null,
+        effectiveStatus: entitlement.effectiveStatus ?? entitlement.status ?? null,
+        isUsable: entitlement.isUsable !== false,
+        trialEndsAt: entitlement.trialEndsAt ?? null,
+        maxUsers: entitlement.limits?.maxUsers ?? null,
+        maxReceipts: entitlement.limits?.maxReceipts ?? null,
+        includedUsers: entitlement.limits?.includedUsers ?? null,
+        includedReceipts: entitlement.limits?.includedReceipts ?? null,
+      };
+    }
+  } catch {
+    // Fall through to JWT session.
+  }
+
   const fromSession = sessionTenants?.find((t) => t.customerId === orgId);
   if (fromSession) {
     return fromSessionTenant(fromSession);
   }
 
-  // SuperAdmin viewing another tenant: admin UA API.
   if (!isSuperAdmin) {
     return null;
   }
 
-  try {
-    const entitlement = await getVouchekEntitlementForTenant(orgId);
-    if (!entitlement) return null;
-    return {
-      planCode: entitlement.planCode ?? null,
-      status: entitlement.status ?? null,
-      effectiveStatus: entitlement.effectiveStatus ?? entitlement.status ?? null,
-      isUsable: entitlement.isUsable !== false,
-      trialEndsAt: entitlement.trialEndsAt ?? null,
-      maxUsers: entitlement.limits?.maxUsers ?? 0,
-      maxReceipts: entitlement.limits?.maxReceipts ?? 0,
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
-async function fetchAzureCustomerUsage(orgId: string): Promise<AzureCustomerUsage | null> {
+async function fetchAzureCustomerUsage(orgId: string, year: number, month: number): Promise<AzureCustomerUsage | null> {
   const apiBaseUrl = process.env.API_BASE_URL?.trim().replace(/\/$/, '');
   if (!apiBaseUrl) return null;
 
   const token = await getServerAccessToken();
   if (!token) return null;
 
-  const now = new Date();
   const url = new URL(`/api/customers/${encodeURIComponent(orgId)}/usage`, apiBaseUrl);
-  url.searchParams.set('year', String(now.getUTCFullYear()));
-  url.searchParams.set('month', String(now.getUTCMonth() + 1));
+  url.searchParams.set('year', String(year));
+  url.searchParams.set('month', String(month));
 
   try {
     const res = await fetch(url, {
@@ -100,6 +129,36 @@ async function fetchAzureCustomerUsage(orgId: string): Promise<AzureCustomerUsag
   } catch {
     return null;
   }
+}
+
+async function countTenantUsers(orgId: string): Promise<number> {
+  try {
+    const uaAdmin = getUniversalAuthAdmin();
+    const { count, error } = await uaAdmin
+      .from('tenant_users')
+      .select('profile_id', { count: 'exact', head: true })
+      .eq('application_id', VOUCHEK_APPLICATION_ID)
+      .eq('tenant_id', orgId);
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function resolveIncluded(
+  isTrial: boolean,
+  included: number | null,
+  max: number | null,
+  paidDefault: number,
+  trialDefault: number,
+): number {
+  if (included != null && included >= 0) return included;
+  if (isTrial) {
+    if (max != null && max >= 0) return max;
+    return trialDefault;
+  }
+  return paidDefault;
 }
 
 export async function GET(
@@ -131,14 +190,31 @@ export async function GET(
       isSuperAdmin,
       session?.tenants,
     );
-    const azureUsage = await fetchAzureCustomerUsage(normalizedOrgId);
+    const { periodKey, year, month } = limaPeriodKey();
+    const [azureUsage, activeUsers] = await Promise.all([
+      fetchAzureCustomerUsage(normalizedOrgId, year, month),
+      countTenantUsers(normalizedOrgId),
+    ]);
 
-    const maxUsers = entitlement?.maxUsers || azureUsage?.maxUsers || 0;
-    const maxReceiptsPerMonth = entitlement?.maxReceipts ?? 0;
-    const activeUsers = azureUsage?.currentUsers ?? 0;
+    const effective = (entitlement?.effectiveStatus ?? entitlement?.status ?? '').toLowerCase();
+    const isTrial = isTrialPlan(entitlement?.planCode, effective || entitlement?.status);
+    const includedUsers = resolveIncluded(
+      isTrial,
+      entitlement?.includedUsers ?? null,
+      entitlement?.maxUsers ?? null,
+      PAID_INCLUDED_USERS,
+      1,
+    );
+    const includedReceipts = resolveIncluded(
+      isTrial,
+      entitlement?.includedReceipts ?? null,
+      entitlement?.maxReceipts ?? null,
+      PAID_INCLUDED_RECEIPTS,
+      100,
+    );
+
     const receiptsUsed = azureUsage?.totalTransactionsThisMonth ?? 0;
     const usersReserved = activeUsers;
-    const effective = (entitlement?.effectiveStatus ?? entitlement?.status ?? '').toLowerCase();
     const trialEndsAt = entitlement?.trialEndsAt ?? null;
     const subscriptionExpired =
       effective === 'expired'
@@ -150,21 +226,23 @@ export async function GET(
 
     const usage: OrganizationUsage = {
       orgId: normalizedOrgId,
-      planTier: (entitlement?.planCode ?? 'trial') as PlanTier,
-      periodKey: currentPeriodKey(),
-      maxUsers,
-      maxReceiptsPerMonth,
+      planTier: (entitlement?.planCode ?? (isTrial ? 'trial' : 'standard')) as PlanTier,
+      periodKey,
+      includedUsers,
+      includedReceiptsPerMonth: includedReceipts,
+      maxUsers: isTrial ? (entitlement?.maxUsers ?? includedUsers) : null,
+      maxReceiptsPerMonth: isTrial ? (entitlement?.maxReceipts ?? includedReceipts) : null,
       activeUsers,
       pendingInvites: 0,
       usersReserved,
-      usersRemaining: Math.max(0, maxUsers - usersReserved),
+      extraUsers: isTrial ? 0 : extraCount(usersReserved, includedUsers),
       receiptsUsed,
-      receiptsRemaining: Math.max(0, maxReceiptsPerMonth - receiptsUsed),
-      allowReceiptOverage: false,
+      extraReceipts: isTrial ? 0 : extraCount(receiptsUsed, includedReceipts),
+      isTrial,
       isActive: entitlement ? entitlement.isUsable && effective !== 'suspended' : true,
       subscriptionEndsAt: trialEndsAt,
-      monthlyFeePen: null,
-      demoEnabled: effective === 'trial',
+      monthlyFeePen: isTrial ? null : STANDARD_FEE_PEN,
+      demoEnabled: isTrial,
       demoDays: null,
       subscriptionExpired,
       accessBlocked:

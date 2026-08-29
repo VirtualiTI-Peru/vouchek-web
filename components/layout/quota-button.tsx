@@ -22,8 +22,8 @@ type QuotaButtonProps = {
 };
 
 function receiptsUsagePercent(usage: OrganizationUsage | null): number {
-  if (!usage || usage.maxReceiptsPerMonth <= 0) return 0;
-  return Math.round((usage.receiptsUsed / usage.maxReceiptsPerMonth) * 100);
+  if (!usage || usage.includedReceiptsPerMonth <= 0) return 0;
+  return Math.round((usage.receiptsUsed / usage.includedReceiptsPerMonth) * 100);
 }
 
 function indicatorColor(percent: number): string | null {
@@ -113,7 +113,7 @@ export function QuotaButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="default">
           <DialogHeader>
-            <DialogTitle>Uso del plan</DialogTitle>
+            <DialogTitle>Uso del Plan</DialogTitle>
           </DialogHeader>
 
           {!activeOrgId ? (
