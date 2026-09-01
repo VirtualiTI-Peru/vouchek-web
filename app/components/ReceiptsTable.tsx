@@ -75,16 +75,29 @@ const formatImporteCell = (receipt: Receipt) => {
 
 const isReceiptParsed = (receipt: Receipt) => {
   if (receipt.parseStatus === 'Parsed') return true;
+  // Stale API/cache can label OCR'd rows as Queued; origin or OCR text means parse already ran.
+  if (receipt.ocrText?.trim() || receipt.transactionSource?.trim()) return true;
   if (receipt.parseStatus === 'Queued') return false;
-  return Boolean(receipt.ocrText?.trim());
+  return false;
 };
 
 const formatOrigenCell = (receipt: Receipt) => {
+  const source = receipt.transactionSource?.trim();
+  if (source) {
+    return source;
+  }
   if (!isReceiptParsed(receipt)) {
     return 'Procesando…';
   }
-  return receipt.transactionSource?.trim() || 'Sin clasificar';
+  return 'Sin clasificar';
 };
+
+const pageLooksStaleQueued = (page: ReceiptPage) =>
+  page.receipts.some(
+    (r) =>
+      r.parseStatus === 'Queued' &&
+      Boolean(r.transactionSource?.trim() || r.ocrText?.trim()),
+  );
 
 const receiptImageUrl = (receipt: Receipt, fallbackCustomerId?: string) => {
   const customerId = receipt.customerId?.trim() || fallbackCustomerId?.trim();
@@ -382,7 +395,7 @@ export default function ReceiptsTable({
       selectedUserId
     );
     const cachedPage = pageCacheRef.current[cacheKey];
-    if (!options.forceRefresh && cachedPage) {
+    if (!options.forceRefresh && cachedPage && !pageLooksStaleQueued(cachedPage)) {
       setReceiptPage(cachedPage);
       setError(null);
       lastKnownUpdateRef.current[customerId] = cachedPage.lastUpdatedAt ?? null;

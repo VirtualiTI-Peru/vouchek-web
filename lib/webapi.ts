@@ -85,7 +85,8 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
     !options.forceRefresh &&
     cachedEntry?.data &&
     cachedEntry.expiresAt > now &&
-    cachedEntry.summaryLastUpdatedAt === summary.lastUpdatedAt
+    cachedEntry.summaryLastUpdatedAt === summary.lastUpdatedAt &&
+    !pageHasStaleQueuedLabels(cachedEntry.data)
   ) {
     return cachedEntry.data;
   }
@@ -371,6 +372,14 @@ function buildEmptyReceiptPage(customerId: string, skip: number, take: number, l
     receipts: [],
     totalCount: 0,
   };
+}
+
+function pageHasStaleQueuedLabels(page: ReceiptPage): boolean {
+  return page.receipts.some(
+    (r) =>
+      r.parseStatus === 'Queued' &&
+      Boolean(r.transactionSource?.trim() || r.ocrText?.trim()),
+  );
 }
 
 function normalizeTake(take: number): number {
