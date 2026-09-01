@@ -67,10 +67,29 @@ const formatImporteCell = (receipt: Receipt) => {
   if (typeof receipt.transactionAmount === 'number' && !Number.isNaN(receipt.transactionAmount) && receipt.transactionAmount > 0) {
     return formatCurrencyPen(receipt.transactionAmount);
   }
-  if (receipt.ocrText?.trim()) {
+  if (isReceiptParsed(receipt)) {
     return 'No procesado';
   }
   return 'Procesando…';
+};
+
+const isReceiptParsed = (receipt: Receipt) => {
+  if (receipt.parseStatus === 'Parsed') return true;
+  if (receipt.parseStatus === 'Queued') return false;
+  return Boolean(receipt.ocrText?.trim());
+};
+
+const formatOrigenCell = (receipt: Receipt) => {
+  if (!isReceiptParsed(receipt)) {
+    return 'Procesando…';
+  }
+  return receipt.transactionSource?.trim() || 'Sin clasificar';
+};
+
+const receiptImageUrl = (receipt: Receipt, fallbackCustomerId?: string) => {
+  const customerId = receipt.customerId?.trim() || fallbackCustomerId?.trim();
+  const params = customerId ? `?customerId=${encodeURIComponent(customerId)}` : '';
+  return `/api/receipt-image/${receipt.userId}/${receipt.receiptId}${params}`;
 };
 
 const formatDateLima = (iso?: string | null) => {
@@ -101,7 +120,7 @@ function receiptToExportRow(receipt: Receipt, includeUserColumn: boolean): (stri
     receipt.receiptId,
     receipt.isDownloaded ? 'Descargada' : 'Disponible',
     formatDateLima(receipt.createdAt),
-    receipt.transactionSource?.trim() || 'Sin clasificar',
+    receipt.transactionSource?.trim() || (isReceiptParsed(receipt) ? 'Sin clasificar' : 'Procesando…'),
     typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : formatImporteCell(receipt),
     formatDateLima(receipt.transactionDateTimeUtc),
     receipt.transactionOperationNumber ?? '',
@@ -922,14 +941,12 @@ export default function ReceiptsTable({
                   <TableCell className="normal-case">
                     {receipt.hasImage ? (
                       <img
-                        src={`/api/receipt-image/${receipt.userId}/${receipt.receiptId}`}
+                        src={receiptImageUrl(receipt, selectedOrg)}
                         alt="Miniatura del voucher"
                         className="h-[30px] w-[45px] cursor-pointer rounded border border-default-200 object-cover"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setImageModal(
-                            `/api/receipt-image/${receipt.userId}/${receipt.receiptId}`
-                          );
+                          setImageModal(receiptImageUrl(receipt, selectedOrg));
                         }}
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
@@ -952,7 +969,7 @@ export default function ReceiptsTable({
                     })}
                   </TableCell>
                   <TableCell className="normal-case">
-                    {receipt.transactionSource?.trim() || 'Sin clasificar'}
+                    {formatOrigenCell(receipt)}
                   </TableCell>
                   <TableCell className="normal-case">
                     {formatImporteCell(receipt)}

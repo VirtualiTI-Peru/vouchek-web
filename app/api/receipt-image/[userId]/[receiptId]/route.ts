@@ -5,7 +5,7 @@ import { isOwnReceiptsOnly } from '@/lib/portal-access';
 import { getServerAccessToken } from '@/lib/server-auth-token';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ userId: string; receiptId: string }> }
 ) {
   try {
@@ -26,9 +26,14 @@ export async function GET(
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
-    // Proxy JPEG bytes. Redirecting to a blob SAS URL fails in the browser when
-    // SAS cannot be signed (no account key) or storage is not reachable from the client.
-    const backendUrl = `${apiBaseUrl}/api/receipts/${userId}/${receiptId}/image`;
+    const customerId = req.nextUrl.searchParams.get('customerId')?.trim()
+      || ctx.orgId
+      || undefined;
+
+    const backendUrl = new URL(`${apiBaseUrl}/api/receipts/${userId}/${receiptId}/image`);
+    if (customerId) {
+      backendUrl.searchParams.set('customerId', customerId);
+    }
 
     const backendRes = await fetch(backendUrl, {
       headers: { Authorization: `Bearer ${token}` },

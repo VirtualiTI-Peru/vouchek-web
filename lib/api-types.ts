@@ -15,6 +15,7 @@ export type Receipt = {
   transactionDateTimeUtc?: string;
   hasImage?: boolean;
   ocrText?: string;
+  parseStatus?: 'Queued' | 'Parsed' | string;
   userName?: string;
   payeeName?: string;  
 };

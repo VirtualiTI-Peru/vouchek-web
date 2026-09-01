@@ -5,8 +5,6 @@ import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 
 async function getServerJwt() {
-  await auth();
-
   const cookieHeader = (await cookies())
     .getAll()
     .map(({ name, value }) => `${name}=${value}`)
@@ -23,11 +21,15 @@ async function getServerJwt() {
       },
     },
     secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-    secureCookie: process.env.NODE_ENV === "production",
   });
 }
 
 export async function getServerAccessToken(): Promise<string | null> {
+  const session = await auth();
+  if (typeof session?.accessToken === "string" && session.accessToken.length > 0) {
+    return session.accessToken;
+  }
+
   const token = await getServerJwt();
   return typeof token?.accessToken === "string" ? token.accessToken : null;
 }
