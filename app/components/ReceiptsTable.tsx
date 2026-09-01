@@ -63,6 +63,16 @@ const formatCurrencyPen = (amount?: number | null) => {
   }).format(amount);
 };
 
+const formatImporteCell = (receipt: Receipt) => {
+  if (typeof receipt.transactionAmount === 'number' && !Number.isNaN(receipt.transactionAmount) && receipt.transactionAmount > 0) {
+    return formatCurrencyPen(receipt.transactionAmount);
+  }
+  if (receipt.ocrText?.trim()) {
+    return 'No procesado';
+  }
+  return 'Procesando…';
+};
+
 const formatDateLima = (iso?: string | null) => {
   if (!iso) return '';
   return new Date(iso).toLocaleString('es-PE', { timeZone: LIMA_TIMEZONE });
@@ -92,7 +102,7 @@ function receiptToExportRow(receipt: Receipt, includeUserColumn: boolean): (stri
     receipt.isDownloaded ? 'Descargada' : 'Disponible',
     formatDateLima(receipt.createdAt),
     receipt.transactionSource ?? '',
-    typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : '',
+    typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : formatImporteCell(receipt),
     formatDateLima(receipt.transactionDateTimeUtc),
     receipt.transactionOperationNumber ?? '',
     receipt.payeeName ?? '',
@@ -672,9 +682,7 @@ export default function ReceiptsTable({
     const { headers, sortedReceipts, includeUserColumn, recordCount } = exportData;
     const rows = sortedReceipts.map((receipt) => {
       const row = receiptToExportRow(receipt, includeUserColumn);
-      row[4] = formatCurrencyPen(
-        typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : null,
-      );
+      row[4] = formatImporteCell(receipt);
       return row;
     });
     const doc = new jsPDF({ orientation: 'landscape' });
@@ -947,7 +955,7 @@ export default function ReceiptsTable({
                     {receipt.transactionSource ?? ''}
                   </TableCell>
                   <TableCell className="normal-case">
-                    {formatCurrencyPen(receipt.transactionAmount)}
+                    {formatImporteCell(receipt)}
                   </TableCell>
                   <TableCell className="normal-case">
                     {receipt.transactionDateTimeUtc
