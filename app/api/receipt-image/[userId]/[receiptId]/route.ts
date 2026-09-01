@@ -4,11 +4,6 @@ import { getPortalContext } from '@/lib/portalContext';
 import { isOwnReceiptsOnly } from '@/lib/portal-access';
 import { getServerAccessToken } from '@/lib/server-auth-token';
 
-type ImageUrlResponse = {
-  url?: string;
-  expiresAtUtc?: string;
-};
-
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string; receiptId: string }> }
@@ -31,7 +26,9 @@ export async function GET(
       return NextResponse.json({ error: ApiErrors.FORBIDDEN }, { status: 403 });
     }
 
-    const backendUrl = `${apiBaseUrl}/api/receipts/${userId}/${receiptId}/image-url`;
+    // Proxy JPEG bytes. Redirecting to a blob SAS URL fails in the browser when
+    // SAS cannot be signed (no account key) or storage is not reachable from the client.
+    const backendUrl = `${apiBaseUrl}/api/receipts/${userId}/${receiptId}/image`;
 
     const backendRes = await fetch(backendUrl, {
       headers: { Authorization: `Bearer ${token}` },
@@ -42,16 +39,14 @@ export async function GET(
       return new NextResponse(null, { status: backendRes.status });
     }
 
-    const payload = (await backendRes.json().catch(() => null)) as ImageUrlResponse | null;
-    if (!payload?.url) {
-      return NextResponse.json({ error: ApiErrors.FETCH_IMAGE }, { status: 502 });
-    }
+    const bytes = await backendRes.arrayBuffer();
+    const contentType = backendRes.headers.get('content-type') || 'image/jpeg';
 
-    // Browser loads bytes from Blob Storage; App Service only authorizes + issues SAS.
-    return NextResponse.redirect(payload.url, {
-      status: 302,
+    return new NextResponse(bytes, {
+      status: 200,
       headers: {
-        'Cache-Control': 'private, max-age=60',
+        'Content-Type': contentType,
+        'Cache-Control': 'private, max-age=300',
       },
     });
   } catch (error: unknown) {

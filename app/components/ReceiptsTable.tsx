@@ -101,7 +101,7 @@ function receiptToExportRow(receipt: Receipt, includeUserColumn: boolean): (stri
     receipt.receiptId,
     receipt.isDownloaded ? 'Descargada' : 'Disponible',
     formatDateLima(receipt.createdAt),
-    receipt.transactionSource ?? '',
+    receipt.transactionSource?.trim() || 'Sin clasificar',
     typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : formatImporteCell(receipt),
     formatDateLima(receipt.transactionDateTimeUtc),
     receipt.transactionOperationNumber ?? '',
@@ -952,7 +952,7 @@ export default function ReceiptsTable({
                     })}
                   </TableCell>
                   <TableCell className="normal-case">
-                    {receipt.transactionSource ?? ''}
+                    {receipt.transactionSource?.trim() || 'Sin clasificar'}
                   </TableCell>
                   <TableCell className="normal-case">
                     {formatImporteCell(receipt)}
