@@ -93,11 +93,15 @@ const formatOrigenCell = (receipt: Receipt) => {
 };
 
 const pageLooksStaleQueued = (page: ReceiptPage) =>
-  page.receipts.some(
-    (r) =>
-      r.parseStatus === 'Queued' &&
-      Boolean(r.transactionSource?.trim() || r.ocrText?.trim()),
-  );
+  page.receipts.some((r) => {
+    const hasOrigin = Boolean(r.transactionSource?.trim());
+    const hasOcr = Boolean(r.ocrText?.trim());
+    const hasAmount = typeof r.transactionAmount === 'number' && r.transactionAmount > 0;
+    if (hasOrigin || hasOcr || hasAmount) {
+      return r.parseStatus === 'Queued';
+    }
+    return r.parseStatus !== 'Parsed';
+  });
 
 const receiptImageUrl = (receipt: Receipt, fallbackCustomerId?: string) => {
   const customerId = receipt.customerId?.trim() || fallbackCustomerId?.trim();

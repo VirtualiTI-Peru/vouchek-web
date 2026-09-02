@@ -120,6 +120,10 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
       if (typeof page.totalCount !== 'number') page.totalCount = 0;
       // Backend list endpoint may omit lastUpdatedAt; keep UI label in sync using summary.
       page.lastUpdatedAt = page.lastUpdatedAt ?? summary.lastUpdatedAt;
+      if (pageLooksUnresolvedProcessing(page)) {
+        receiptPagesCache.delete(cacheKey);
+        return page;
+      }
       receiptPagesCache.set(cacheKey, {
         data: page,
         expiresAt: Date.now() + RECEIPTS_CACHE_TTL_MS,
@@ -375,11 +379,19 @@ function buildEmptyReceiptPage(customerId: string, skip: number, take: number, l
 }
 
 function pageHasStaleQueuedLabels(page: ReceiptPage): boolean {
-  return page.receipts.some(
-    (r) =>
-      r.parseStatus === 'Queued' &&
-      Boolean(r.transactionSource?.trim() || r.ocrText?.trim()),
-  );
+  return pageLooksUnresolvedProcessing(page);
+}
+
+function pageLooksUnresolvedProcessing(page: ReceiptPage): boolean {
+  return page.receipts.some((r) => {
+    const hasOrigin = Boolean(r.transactionSource?.trim());
+    const hasOcr = Boolean(r.ocrText?.trim());
+    const hasAmount = typeof r.transactionAmount === 'number' && r.transactionAmount > 0;
+    if (hasOrigin || hasOcr || hasAmount) {
+      return r.parseStatus === 'Queued';
+    }
+    return r.parseStatus !== 'Parsed';
+  });
 }
 
 function normalizeTake(take: number): number {
