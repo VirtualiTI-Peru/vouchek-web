@@ -1,13 +1,23 @@
 import type { Receipt, ReceiptsSummaryByDate } from './api-types';
 import { ApiErrors } from './api-errors';
 
+function normalizeReceipt(row: Receipt): Receipt {
+  const anyRow = row as Receipt & { ParentReceiptId?: string | null };
+  const parentReceiptId = row.parentReceiptId ?? anyRow.ParentReceiptId ?? null;
+  return {
+    ...row,
+    parentReceiptId: parentReceiptId?.trim() ? parentReceiptId : null,
+  };
+}
+
 // Fetch all receipts for a customer using the public API route (client/browser safe)
-export async function fetchReceipts(customerId: string, options: { forceRefresh?: boolean; date?: string; timezoneOffsetMinutes?: number; transactionSource?: string; userId?: string } = {}): Promise<Receipt[]> {
+export async function fetchReceipts(customerId: string, options: { forceRefresh?: boolean; date?: string; timezoneOffsetMinutes?: number; transactionSource?: string; userId?: string; includeDuplicates?: boolean } = {}): Promise<Receipt[]> {
   let allReceipts: Receipt[] = [];
   let page = 1;
-  const pageSize = 200;
+  const pageSize = 100;
   let hasMore = true;
-  while (hasMore) {
+  const maxPages = 50;
+  while (hasMore && page <= maxPages) {
     const params = new URLSearchParams({
       customerId,
       page: String(page),
@@ -17,6 +27,7 @@ export async function fetchReceipts(customerId: string, options: { forceRefresh?
     if (options.date) params.set('date', options.date);
     if (options.transactionSource) params.set('transactionSource', options.transactionSource);
     if (options.userId) params.set('userId', options.userId);
+    if (options.includeDuplicates) params.set('includeDuplicates', 'true');
     if (typeof options.timezoneOffsetMinutes === 'number') {
       params.set('timezoneOffsetMinutes', String(options.timezoneOffsetMinutes));
     }
@@ -26,13 +37,11 @@ export async function fetchReceipts(customerId: string, options: { forceRefresh?
       throw new Error(data?.error ?? ApiErrors.FETCH_RECEIPTS);
     }
     const data = await res.json();
-    if (Array.isArray(data.receipts)) {
-      allReceipts = allReceipts.concat(data.receipts);
-      hasMore = !!data.hasMore;
-      page++;
-    } else {
-      hasMore = false;
-    }
+    const receipts = Array.isArray(data.receipts) ? data.receipts.map((row: Receipt) => normalizeReceipt(row)) : [];
+    allReceipts = allReceipts.concat(receipts);
+    const totalCount = Number(data.totalCount ?? 0);
+    hasMore = receipts.length > 0 && (Boolean(data.hasMore) || (totalCount > 0 && allReceipts.length < totalCount));
+    page++;
   }
   return allReceipts;
 }

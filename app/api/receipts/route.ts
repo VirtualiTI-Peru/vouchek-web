@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     if (isOwnReceiptsOnly(ctx)) {
       userId = ctx.userId;
     }
+    const includeDuplicates = searchParams.get('includeDuplicates') === 'true' || searchParams.get('includeDuplicates') === '1';
     const timezoneOffsetMinutes = searchParams.has('timezoneOffsetMinutes')
       ? Number(searchParams.get('timezoneOffsetMinutes'))
       : undefined;
@@ -40,13 +41,18 @@ export async function GET(req: NextRequest) {
       date,
       transactionSource,
       userId,
+      includeDuplicates,
       timezoneOffsetMinutes: Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : undefined,
     });
+
+    const loadedCount = Array.isArray(receiptsPage.receipts) ? receiptsPage.receipts.length : 0;
+    const hasMore = (page - 1) * pageSize + loadedCount < (receiptsPage.totalCount ?? 0);
 
     return NextResponse.json({
       ...receiptsPage,
       page,
       pageSize,
+      hasMore,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || ApiErrors.FETCH_RECEIPTS }, { status: 500 });

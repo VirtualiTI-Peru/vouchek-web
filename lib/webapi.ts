@@ -33,6 +33,7 @@ type FetchReceiptPageOptions = FetchReceiptsOptions & {
   timezoneOffsetMinutes?: number;
   transactionSource?: string;
   userId?: string;
+  includeDuplicates?: boolean;
 };
 
 const RECEIPTS_CACHE_TTL_MS = getReceiptsCacheTtlMs();
@@ -69,6 +70,7 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
     : null;
   const normalizedTransactionSource = options.transactionSource?.trim();
   const normalizedUserId = options.userId?.trim();
+  const includeDuplicates = options.includeDuplicates === true;
   const cacheKey = buildReceiptPageCacheKey(
     normalizedCustomerId,
     skip,
@@ -77,6 +79,7 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
     normalizedTimezoneOffsetMinutes,
     normalizedTransactionSource ?? null,
     normalizedUserId ?? null,
+    includeDuplicates,
   );
   const cachedEntry = receiptPagesCache.get(cacheKey);
   const now = Date.now();
@@ -108,6 +111,9 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
   if (normalizedUserId) {
     url.searchParams.set('userId', normalizedUserId);
   }
+  if (includeDuplicates) {
+    url.searchParams.set('includeDuplicates', 'true');
+  }
   if (typeof options.timezoneOffsetMinutes === 'number') {
     url.searchParams.set('timezoneOffsetMinutes', String(options.timezoneOffsetMinutes));
   }
@@ -116,6 +122,14 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
     .then((page) => {
       // Defensive: ensure receipts is always an array
       if (!Array.isArray(page.receipts)) page.receipts = [];
+      page.receipts = page.receipts.map((row) => {
+        const anyRow = row as Receipt & { ParentReceiptId?: string | null };
+        const parentReceiptId = row.parentReceiptId ?? anyRow.ParentReceiptId ?? null;
+        return {
+          ...row,
+          parentReceiptId: parentReceiptId?.trim() ? parentReceiptId : null,
+        };
+      });
       // Defensive: ensure totalCount is a number
       if (typeof page.totalCount !== 'number') page.totalCount = 0;
       // Backend list endpoint may omit lastUpdatedAt; keep UI label in sync using summary.
@@ -305,8 +319,8 @@ function getReceiptsSummaryByDateCacheTtlMs(): number {
   return Math.round(ttlSeconds * 1000);
 }
 
-function buildReceiptPageCacheKey(customerId: string, skip: number, take: number, date: string | null, timezoneOffsetMinutes: number | null, transactionSource: string | null, userId: string | null): string {
-  return `${customerId}:${date ?? 'all'}:${timezoneOffsetMinutes ?? 'na'}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${skip}:${take}`;
+function buildReceiptPageCacheKey(customerId: string, skip: number, take: number, date: string | null, timezoneOffsetMinutes: number | null, transactionSource: string | null, userId: string | null, includeDuplicates = false): string {
+  return `${customerId}:${date ?? 'all'}:${timezoneOffsetMinutes ?? 'na'}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${includeDuplicates ? 'dups' : 'orig'}:${skip}:${take}`;
 }
 
 function buildReceiptsSummaryByDateCacheKey(

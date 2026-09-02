@@ -109,6 +109,11 @@ const receiptImageUrl = (receipt: Receipt, fallbackCustomerId?: string) => {
   return `/api/receipt-image/${receipt.userId}/${receipt.receiptId}${params}`;
 };
 
+const isDuplicateReceipt = (receipt: Receipt) => {
+  const anyReceipt = receipt as Receipt & { ParentReceiptId?: string | null };
+  return Boolean((receipt.parentReceiptId ?? anyReceipt.ParentReceiptId)?.trim());
+};
+
 const formatDateLima = (iso?: string | null) => {
   if (!iso) return '';
   return new Date(iso).toLocaleString('es-PE', { timeZone: LIMA_TIMEZONE });
@@ -146,14 +151,14 @@ function receiptToExportRow(receipt: Receipt, includeUserColumn: boolean): (stri
   if (includeUserColumn) {
     row.push(receipt.userName ?? '');
   }
-  row.push(receipt.parentReceiptId ? 'Sí' : 'No');
+  row.push(isDuplicateReceipt(receipt) ? 'Sí' : 'No');
   return row;
 }
 
 function buildStyledExcelWorkbook(
   headers: string[],
   rows: (string | number)[][],
-  meta: { selectedDate: string; recordCount: number },
+  meta: { selectedDate: string; recordCount: number; includeDuplicates: boolean },
 ) {
   const importeColumnIndex = 4;
   const metaRows: (string | number)[][] = [
@@ -161,6 +166,7 @@ function buildStyledExcelWorkbook(
     [`Generado: ${formatDateLima(new Date().toISOString())}`],
     [`Fecha consultada: ${meta.selectedDate}`],
     [`Total de registros: ${meta.recordCount}`],
+    [`Incluye duplicados: ${meta.includeDuplicates ? 'Sí' : 'No'}`],
     [],
   ];
   const sheetData = [...metaRows, headers, ...rows];
@@ -310,7 +316,8 @@ export default function ReceiptsTable({
         normalizedInitialDate,
         normalizedInitialTimezoneOffsetMinutes,
         initialTransactionSource ?? null,
-        initialUserId ?? null
+        initialUserId ?? null,
+        false
       )
     : null;
   const pageCacheRef = useRef<Record<string, ReceiptPage>>(
@@ -341,9 +348,10 @@ export default function ReceiptsTable({
     date: string,
     timezoneOffsetMinutes: number,
     transactionSource: string | null,
-    userId: string | null
+    userId: string | null,
+    includeDuplicates: boolean
   ): string {
-    return `${customerId}:${date}:${timezoneOffsetMinutes}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${page}`;
+    return `${customerId}:${date}:${timezoneOffsetMinutes}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${includeDuplicates ? 'dups' : 'orig'}:${page}`;
   }
 
   function getTimezoneOffsetMinutes(date: string): number {
@@ -396,7 +404,8 @@ export default function ReceiptsTable({
       selectedDate,
       selectedTimezoneOffsetMinutes,
       selectedTransactionSource,
-      selectedUserId
+      selectedUserId,
+      showDuplicates
     );
     const cachedPage = pageCacheRef.current[cacheKey];
     if (!options.forceRefresh && cachedPage && !pageLooksStaleQueued(cachedPage)) {
@@ -426,8 +435,12 @@ export default function ReceiptsTable({
 
       if (ownReceiptsOnly && lockedUserId) {
         query.set('userId', lockedUserId);
-      } else if (selectedUserId) {
+      } else       if (selectedUserId) {
         query.set('userId', selectedUserId);
+      }
+
+      if (showDuplicates) {
+        query.set('includeDuplicates', 'true');
       }
 
       if (options.forceRefresh) {
@@ -507,7 +520,7 @@ export default function ReceiptsTable({
     if (selectedOrg) {
       void loadReceiptsPage(selectedOrg, currentPage);
     }
-  }, [selectedOrg, currentPage, selectedDate, selectedTransactionSource, selectedUserId]);
+  }, [selectedOrg, currentPage, selectedDate, selectedTransactionSource, selectedUserId, showDuplicates]);
 
   useEffect(() => {
     if (!selectedOrg) return;
@@ -577,7 +590,7 @@ export default function ReceiptsTable({
 
   let filteredReceipts = receiptPage.receipts;
   if (!showDuplicates) {
-    filteredReceipts = filteredReceipts.filter((r) => !r.parentReceiptId);
+    filteredReceipts = filteredReceipts.filter((r) => !isDuplicateReceipt(r));
   }
 
   if (userFilter.trim()) {
@@ -635,6 +648,7 @@ export default function ReceiptsTable({
         timezoneOffsetMinutes: getTimezoneOffsetMinutes(selectedDate),
         transactionSource: selectedTransactionSource ?? undefined,
         userId: ownReceiptsOnly && lockedUserId ? lockedUserId : (selectedUserId ?? undefined),
+        includeDuplicates: showDuplicates,
       });
     } catch {
       return null;
@@ -643,7 +657,7 @@ export default function ReceiptsTable({
     const q = userFilter.trim().toLowerCase();
     let filtered = showDuplicates
       ? allReceipts
-      : allReceipts.filter((r) => !r.parentReceiptId);
+      : allReceipts.filter((r) => !isDuplicateReceipt(r));
     if (q) {
       filtered = filtered.filter(
         (r) =>
@@ -704,8 +718,12 @@ export default function ReceiptsTable({
     const workbook = buildStyledExcelWorkbook(headers, rowsForExcel, {
       selectedDate,
       recordCount,
+      includeDuplicates: showDuplicates,
     });
-    XLSX.writeFile(workbook, `vouchers_${selectedDate}.xlsx`);
+    XLSX.writeFile(
+      workbook,
+      showDuplicates ? `vouchers_${selectedDate}_duplicados.xlsx` : `vouchers_${selectedDate}.xlsx`,
+    );
   }
 
   async function exportToPdf() {
@@ -727,16 +745,17 @@ export default function ReceiptsTable({
     doc.setFontSize(9);
     doc.text(`Generado: ${formatDateLima(new Date().toISOString())}`, 14, 21);
     doc.text(`Fecha consultada: ${selectedDate} · ${recordCount} registro(s)`, 14, 27);
+    doc.text(`Incluye duplicados: ${showDuplicates ? 'Sí' : 'No'}`, 14, 33);
     autoTable(doc, {
       head: [headers],
       body: rows,
-      startY: 32,
+      startY: 38,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [39, 110, 241], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [245, 247, 250] },
-      margin: { top: 32, right: 10, bottom: 10, left: 10 },
+      margin: { top: 38, right: 10, bottom: 10, left: 10 },
     });
-    doc.save(`vouchers_${selectedDate}.pdf`);
+    doc.save(showDuplicates ? `vouchers_${selectedDate}_duplicados.pdf` : `vouchers_${selectedDate}.pdf`);
   }
 
   const paginationLabel = (() => {
@@ -764,7 +783,10 @@ export default function ReceiptsTable({
           <Checkbox
             id="show-duplicates"
             checked={showDuplicates}
-            onCheckedChange={(checked) => setShowDuplicates(checked === true)}
+            onCheckedChange={(checked) => {
+              setShowDuplicates(checked === true);
+              setCurrentPage(1);
+            }}
           />
           <Label htmlFor="show-duplicates" className="cursor-pointer font-normal">
             Mostrar duplicados
@@ -941,15 +963,15 @@ export default function ReceiptsTable({
 
             {sortedReceipts.map((receipt) => {
               const isHighlighted = highlightedRow === receipt.receiptId;
-              const isDuplicateReceipt = Boolean(receipt.parentReceiptId);
+              const duplicate = isDuplicateReceipt(receipt);
               return (
                 <TableRow
                   key={`${receipt.userId}:${receipt.receiptId}`}
                   className={cn(
                     'cursor-pointer',
-                    isDuplicateReceipt &&
+                    duplicate &&
                       (isHighlighted ? 'bg-destructive/15' : 'bg-destructive/5'),
-                    !isDuplicateReceipt &&
+                    !duplicate &&
                       isHighlighted &&
                       'bg-warning/15'
                   )}
@@ -974,7 +996,7 @@ export default function ReceiptsTable({
                     ) : (
                       <span className="text-sm text-default-500">Sin imagen</span>
                     )}
-                    {isDuplicateReceipt && (
+                    {duplicate && (
                       <Badge color="destructive" className="mt-1.5 text-xs">
                         Duplicado
                       </Badge>
