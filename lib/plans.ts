@@ -1,6 +1,7 @@
 export type PlanTier = 'trial' | 'standard' | string;
 
 export const PAID_INCLUDED_USERS = 5;
+/** Fallback only when Universal Auth does not send included/max receipts. */
 export const PAID_INCLUDED_RECEIPTS = 6000;
 export const EXTRA_USER_PEN = 8;
 export const EXTRA_RECEIPT_PEN = 0.023;

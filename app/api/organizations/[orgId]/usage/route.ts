@@ -56,6 +56,11 @@ function readOptionalInt(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function readLimit(limits: Record<string, unknown> | null | undefined, camel: string, snake: string): number | null {
+  if (!limits) return null;
+  return readOptionalInt(limits[camel] ?? limits[snake]);
+}
+
 function fromSessionTenant(tenant: VirtualitiCustomer): EntitlementSnapshot {
   const status = tenant.status ?? null;
   const limits = (tenant.limits ?? {}) as Record<string, unknown>;
@@ -65,10 +70,10 @@ function fromSessionTenant(tenant: VirtualitiCustomer): EntitlementSnapshot {
     effectiveStatus: status,
     isUsable: (status ?? '').toLowerCase() === 'active' || (status ?? '').toLowerCase() === 'trial',
     trialEndsAt: tenant.trialEndsAt ?? null,
-    maxUsers: readOptionalInt(limits.maxUsers ?? limits.max_users),
-    maxReceipts: readOptionalInt(limits.maxReceipts ?? limits.max_receipts),
-    includedUsers: readOptionalInt(limits.includedUsers ?? limits.included_users),
-    includedReceipts: readOptionalInt(limits.includedReceipts ?? limits.included_receipts),
+    maxUsers: readLimit(limits, 'maxUsers', 'max_users'),
+    maxReceipts: readLimit(limits, 'maxReceipts', 'max_receipts'),
+    includedUsers: readLimit(limits, 'includedUsers', 'included_users'),
+    includedReceipts: readLimit(limits, 'includedReceipts', 'included_receipts'),
   };
 }
 
@@ -80,16 +85,17 @@ async function resolveEntitlement(
   try {
     const entitlement = await getVouchekEntitlementForTenant(orgId);
     if (entitlement) {
+      const limits = (entitlement.limits ?? {}) as Record<string, unknown>;
       return {
         planCode: entitlement.planCode ?? null,
         status: entitlement.status ?? null,
         effectiveStatus: entitlement.effectiveStatus ?? entitlement.status ?? null,
         isUsable: entitlement.isUsable !== false,
         trialEndsAt: entitlement.trialEndsAt ?? null,
-        maxUsers: entitlement.limits?.maxUsers ?? null,
-        maxReceipts: entitlement.limits?.maxReceipts ?? null,
-        includedUsers: entitlement.limits?.includedUsers ?? null,
-        includedReceipts: entitlement.limits?.includedReceipts ?? null,
+        maxUsers: readLimit(limits, 'maxUsers', 'max_users'),
+        maxReceipts: readLimit(limits, 'maxReceipts', 'max_receipts'),
+        includedUsers: readLimit(limits, 'includedUsers', 'included_users'),
+        includedReceipts: readLimit(limits, 'includedReceipts', 'included_receipts'),
       };
     }
   } catch {
@@ -153,11 +159,14 @@ function resolveIncluded(
   paidDefault: number,
   trialDefault: number,
 ): number {
-  if (included != null && included >= 0) return included;
-  if (isTrial) {
-    if (max != null && max >= 0) return max;
-    return trialDefault;
-  }
+  const hasIncluded = included != null && included >= 0;
+  const hasMax = max != null && max >= 0;
+  // Prefer Universal Auth. If catalog still has 6000 included but the assignment
+  // was lowered via max_receipts, use the tighter cap.
+  if (hasIncluded && hasMax) return Math.min(included, max);
+  if (hasIncluded) return included;
+  if (hasMax) return max;
+  if (isTrial) return trialDefault;
   return paidDefault;
 }
 
