@@ -58,6 +58,7 @@ export type SummaryBySource = {
 export type TotalByUser = {
   transactionSource: string;
   userId: string;
+  receiptCount: number;
   totalAmount: number;
   fullName: string;
 };

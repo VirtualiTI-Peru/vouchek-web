@@ -1,7 +1,7 @@
 
 import { getPortalContext } from './portalContext';
 import { isOwnReceiptsOnly } from './portal-access';
-import type { Receipt, ReceiptPage, ReceiptSummary, Customer, ReceiptsSummaryByDate, TotalByUser } from './api-types';
+import type { Receipt, ReceiptPage, ReceiptSummary, Customer, ReceiptsSummaryByDate, TotalByUser, SummaryBySource } from './api-types';
 
 type ReceiptPageCacheEntry = {
   expiresAt: number;
@@ -130,9 +130,11 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
           parentReceiptId: parentReceiptId?.trim() ? parentReceiptId : null,
         };
       });
-      // Defensive: ensure totalCount is a number
-      if (typeof page.totalCount !== 'number') page.totalCount = 0;
-      // Backend list endpoint may omit lastUpdatedAt; keep UI label in sync using summary.
+      const anyPage = page as ReceiptPage & { TotalCount?: number };
+      page.totalCount = Number(page.totalCount ?? anyPage.TotalCount ?? 0);
+      page.pageSize = take;
+      page.page = Math.floor(skip / take) + 1;
+      page.hasMore = skip + page.receipts.length < page.totalCount;
       page.lastUpdatedAt = page.lastUpdatedAt ?? summary.lastUpdatedAt;
       if (pageLooksUnresolvedProcessing(page)) {
         receiptPagesCache.delete(cacheKey);
@@ -332,35 +334,42 @@ function buildReceiptsSummaryByDateCacheKey(
   return `${customerId}:${date}:${timezoneOffsetMinutes ?? 'na'}:${viewerScope}`;
 }
 
-function normalizeSummaryByDate(summary: ReceiptsSummaryByDate): ReceiptsSummaryByDate {
+function mapTotalByUser(row: TotalByUser & {
+  UserId?: string;
+  TransactionSource?: string;
+  TotalAmount?: number;
+  FullName?: string;
+  ReceiptCount?: number;
+}): TotalByUser {
   return {
-    summaryBySource: Array.isArray(summary.summaryBySource) ? summary.summaryBySource : [],
-    totalsByUser: Array.isArray(summary.totalsByUser) ? summary.totalsByUser : [],
+    userId: String(row.userId ?? row.UserId ?? ''),
+    transactionSource: String(row.transactionSource ?? row.TransactionSource ?? 'Sin clasificar'),
+    receiptCount: Number(row.receiptCount ?? row.ReceiptCount ?? 0),
+    totalAmount: Number(row.totalAmount ?? row.TotalAmount ?? 0),
+    fullName: String(row.fullName ?? row.FullName ?? ''),
+  };
+}
+
+function normalizeSummaryByDate(summary: ReceiptsSummaryByDate): ReceiptsSummaryByDate {
+  const anySummary = summary as ReceiptsSummaryByDate & {
+    SummaryBySource?: SummaryBySource[];
+    TotalsByUser?: TotalByUser[];
+  };
+  const totalsByUser = (Array.isArray(summary.totalsByUser) ? summary.totalsByUser : anySummary.TotalsByUser ?? [])
+    .map((row) => mapTotalByUser(row));
+  const summaryBySource = Array.isArray(summary.summaryBySource)
+    ? summary.summaryBySource
+    : anySummary.SummaryBySource ?? [];
+  return {
+    summaryBySource,
+    totalsByUser,
   };
 }
 
 function filterSummaryByUser(summary: ReceiptsSummaryByDate, userId: string): ReceiptsSummaryByDate {
   const normalized = normalizeSummaryByDate(summary);
   const totalsByUser = normalized.totalsByUser.filter((row) => {
-    const rowUserId = String(
-      (row as TotalByUser & { UserId?: string }).userId
-        ?? (row as TotalByUser & { UserId?: string }).UserId
-        ?? '',
-    );
-    return rowUserId === userId;
-  }).map((row) => {
-    const anyRow = row as TotalByUser & {
-      UserId?: string;
-      TransactionSource?: string;
-      TotalAmount?: number;
-      FullName?: string;
-    };
-    return {
-      userId: String(anyRow.userId ?? anyRow.UserId ?? ''),
-      transactionSource: String(anyRow.transactionSource ?? anyRow.TransactionSource ?? 'Sin clasificar'),
-      totalAmount: Number(anyRow.totalAmount ?? anyRow.TotalAmount ?? 0),
-      fullName: String(anyRow.fullName ?? anyRow.FullName ?? ''),
-    };
+    return row.userId === userId;
   });
 
   const amountBySource = new Map<string, number>();

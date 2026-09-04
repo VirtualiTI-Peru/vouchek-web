@@ -45,7 +45,7 @@ export default function DashboardSummary({
   const [search, setSearch] = useState('');
   const [summaryData, setSummaryData] = useState<ReceiptsSummaryByDate | null>(data);
   const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'fullName' | 'transactionSource' | 'totalAmount'>('totalAmount');
+  const [sortBy, setSortBy] = useState<'fullName' | 'transactionSource' | 'receiptCount' | 'totalAmount'>('totalAmount');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const summaryCacheRef = useRef<Record<string, ReceiptsSummaryByDate | null>>({});
 
@@ -108,7 +108,7 @@ export default function DashboardSummary({
     void loadSummary(customerId, date, effectiveTimezoneOffsetMinutes);
   }, [customerId, date, initialTimezoneOffsetMinutes, data]);
 
-  function handleSort(column: 'fullName' | 'transactionSource' | 'totalAmount') {
+  function handleSort(column: 'fullName' | 'transactionSource' | 'receiptCount' | 'totalAmount') {
     if (sortBy === column) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
@@ -137,7 +137,8 @@ export default function DashboardSummary({
           const source = row.transactionSource.toLowerCase();
           const fullName = row.fullName.toLowerCase();
           const total = String(row.totalAmount).toLowerCase();
-          return source.includes(normalizedSearch) || fullName.includes(normalizedSearch) || total.includes(normalizedSearch);
+          const count = String(row.receiptCount ?? 0);
+          return source.includes(normalizedSearch) || fullName.includes(normalizedSearch) || total.includes(normalizedSearch) || count.includes(normalizedSearch);
         })
       : rows;
 
@@ -145,6 +146,8 @@ export default function DashboardSummary({
       let compareResult = 0;
       if (sortBy === 'totalAmount') {
         compareResult = a.totalAmount - b.totalAmount;
+      } else if (sortBy === 'receiptCount') {
+        compareResult = (a.receiptCount ?? 0) - (b.receiptCount ?? 0);
       } else {
         compareResult = a[sortBy].localeCompare(b[sortBy], 'es', { sensitivity: 'base' });
       }
@@ -205,7 +208,7 @@ export default function DashboardSummary({
             data-lpignore="true"
             data-1p-ignore="true"
             data-form-type="other"
-            placeholder="Usuario, origen o total"
+            placeholder="Usuario, origen, cantidad o total"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -226,6 +229,11 @@ export default function DashboardSummary({
                   </button>
                 </TableHead>
                 <TableHead className="text-right">
+                  <button type="button" className="inline-flex items-center gap-1 font-semibold ml-auto" onClick={() => handleSort('receiptCount')}>
+                    Recibos <SortIcon column="receiptCount" />
+                  </button>
+                </TableHead>
+                <TableHead className="text-right">
                   <button type="button" className="inline-flex items-center gap-1 font-semibold ml-auto" onClick={() => handleSort('totalAmount')}>
                     Total <SortIcon column="totalAmount" />
                   </button>
@@ -240,6 +248,7 @@ export default function DashboardSummary({
                   <TableCell>
                     <Badge color="secondary">{row.transactionSource}</Badge>
                   </TableCell>
+                  <TableCell className="text-right tabular-nums">{row.receiptCount ?? 0}</TableCell>
                   <TableCell className="text-right font-medium">{formatCurrency(row.totalAmount)}</TableCell>
                   <TableCell>
                     <Button
@@ -260,7 +269,7 @@ export default function DashboardSummary({
               ))}
               {!filteredAndSortedRows.length && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-default-500">
+                  <TableCell colSpan={5} className="text-center py-8 text-default-500">
                     Sin resultados con los filtros actuales.
                   </TableCell>
                 </TableRow>

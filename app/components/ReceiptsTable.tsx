@@ -435,7 +435,7 @@ export default function ReceiptsTable({
 
       if (ownReceiptsOnly && lockedUserId) {
         query.set('userId', lockedUserId);
-      } else       if (selectedUserId) {
+      } else if (selectedUserId) {
         query.set('userId', selectedUserId);
       }
 
@@ -463,7 +463,7 @@ export default function ReceiptsTable({
         hasMore: Boolean(data?.hasMore),
         lastUpdatedAt: data?.lastUpdatedAt ?? null,
         receipts: Array.isArray(data?.receipts) ? data.receipts : [],
-        totalCount: Number(data?.totalCount ?? 0),
+        totalCount: Number(data?.totalCount ?? data?.TotalCount ?? 0),
       } satisfies ReceiptPage;
 
       pageCacheRef.current[cacheKey] = nextPage;
@@ -629,8 +629,21 @@ export default function ReceiptsTable({
     if (sortDirection === 'desc') sortedReceipts.reverse();
   }
 
-  const totalPages = Math.max(1, Math.ceil((receiptPage.totalCount ?? 0) / receiptPage.pageSize));
-  const showPagination = totalPages > 1;
+  const pageSize = receiptPage.pageSize || DEFAULT_PAGE_SIZE;
+  const loadedOnPage = receiptPage.receipts.length;
+  const apiTotal = Number(receiptPage.totalCount ?? 0);
+  const pageHadHiddenDuplicates = !showDuplicates && receiptPage.receipts.some(isDuplicateReceipt);
+  const inferredHasMore =
+    Boolean(receiptPage.hasMore) ||
+    (loadedOnPage >= pageSize && apiTotal > currentPage * pageSize) ||
+    (pageHadHiddenDuplicates && loadedOnPage >= pageSize);
+  const totalCount = Math.max(apiTotal, (currentPage - 1) * pageSize + loadedOnPage);
+  const totalPages = Math.max(
+    1,
+    Math.ceil((totalCount || loadedOnPage) / pageSize) || 1,
+    inferredHasMore ? currentPage + 1 : currentPage,
+  );
+  const showPaginationControls = totalPages > 1;
   const columnCount = 7 + (ownReceiptsOnly ? 0 : 1) + (isSuperAdmin ? 1 : 0);
 
   async function buildExportData(): Promise<{
@@ -759,11 +772,11 @@ export default function ReceiptsTable({
   }
 
   const paginationLabel = (() => {
-    const start = (currentPage - 1) * receiptPage.pageSize + 1;
-    const end = start + receiptPage.receipts.length - 1;
-    const total = receiptPage.totalCount ?? 0;
-    if (total === 0) return 'Sin vouchers';
-    return `${start}–${end} de ${total} vouchers`;
+    const loadedVisible = sortedReceipts.length;
+    const start = loadedVisible === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const end = loadedVisible === 0 ? 0 : start + loadedVisible - 1;
+    if (totalCount === 0 && loadedVisible === 0) return 'Sin vouchers';
+    return `${start}–${end} de ${totalCount} vouchers`;
   })();
 
   return (
@@ -1053,9 +1066,9 @@ export default function ReceiptsTable({
         </Table>
       </div>
 
-      {showPagination && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-default-500">{paginationLabel}</p>
+          {showPaginationControls && (
           <div className="flex items-center gap-1">
             <Button
               type="button"
@@ -1101,8 +1114,8 @@ export default function ReceiptsTable({
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        </div>
-      )}
+          )}
+      </div>
 
       <Dialog open={!!imageModal} onOpenChange={(open) => !open && setImageModal(null)}>
         <DialogContent size="default">
