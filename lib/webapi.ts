@@ -123,11 +123,17 @@ export async function fetchReceiptsPage(customerId: string, options: FetchReceip
       // Defensive: ensure receipts is always an array
       if (!Array.isArray(page.receipts)) page.receipts = [];
       page.receipts = page.receipts.map((row) => {
-        const anyRow = row as Receipt & { ParentReceiptId?: string | null };
+        const anyRow = row as Receipt & {
+          ParentReceiptId?: string | null;
+          TransactionOperationNumber?: string | null;
+        };
         const parentReceiptId = row.parentReceiptId ?? anyRow.ParentReceiptId ?? null;
+        const transactionOperationNumber =
+          (row.transactionOperationNumber ?? anyRow.TransactionOperationNumber ?? '').trim() || undefined;
         return {
           ...row,
           parentReceiptId: parentReceiptId?.trim() ? parentReceiptId : null,
+          transactionOperationNumber,
         };
       });
       const anyPage = page as ReceiptPage & { TotalCount?: number };

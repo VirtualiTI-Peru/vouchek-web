@@ -2,21 +2,31 @@ import type { Receipt, ReceiptsSummaryByDate } from './api-types';
 import { ApiErrors } from './api-errors';
 
 function normalizeReceipt(row: Receipt): Receipt {
-  const anyRow = row as Receipt & { ParentReceiptId?: string | null };
+  const anyRow = row as Receipt & {
+    ParentReceiptId?: string | null;
+    TransactionOperationNumber?: string | null;
+  };
   const parentReceiptId = row.parentReceiptId ?? anyRow.ParentReceiptId ?? null;
+  const transactionOperationNumber =
+    (row.transactionOperationNumber ?? anyRow.TransactionOperationNumber ?? '').trim() || undefined;
   return {
     ...row,
     parentReceiptId: parentReceiptId?.trim() ? parentReceiptId : null,
+    transactionOperationNumber,
   };
 }
 
-// Fetch all receipts for a customer using the public API route (client/browser safe)
-export async function fetchReceipts(customerId: string, options: { forceRefresh?: boolean; date?: string; timezoneOffsetMinutes?: number; transactionSource?: string; userId?: string; includeDuplicates?: boolean } = {}): Promise<Receipt[]> {
+export async function fetchAllReceipts(
+  customerId: string,
+  options: { forceRefresh?: boolean; date?: string; timezoneOffsetMinutes?: number; transactionSource?: string; userId?: string; includeDuplicates?: boolean } = {},
+): Promise<{ receipts: Receipt[]; lastUpdatedAt: string | null; totalCount: number }> {
   let allReceipts: Receipt[] = [];
   let page = 1;
   const pageSize = 100;
   let hasMore = true;
   const maxPages = 50;
+  let lastUpdatedAt: string | null = null;
+  let totalCount = 0;
   while (hasMore && page <= maxPages) {
     const params = new URLSearchParams({
       customerId,
@@ -37,13 +47,20 @@ export async function fetchReceipts(customerId: string, options: { forceRefresh?
       throw new Error(data?.error ?? ApiErrors.FETCH_RECEIPTS);
     }
     const data = await res.json();
+    lastUpdatedAt = data?.lastUpdatedAt ?? lastUpdatedAt;
+    totalCount = Number(data?.totalCount ?? totalCount);
     const receipts = Array.isArray(data.receipts) ? data.receipts.map((row: Receipt) => normalizeReceipt(row)) : [];
     allReceipts = allReceipts.concat(receipts);
-    const totalCount = Number(data.totalCount ?? 0);
     hasMore = receipts.length > 0 && (Boolean(data.hasMore) || (totalCount > 0 && allReceipts.length < totalCount));
     page++;
   }
-  return allReceipts;
+  return { receipts: allReceipts, lastUpdatedAt, totalCount: totalCount || allReceipts.length };
+}
+
+// Fetch all receipts for a customer using the public API route (client/browser safe)
+export async function fetchReceipts(customerId: string, options: { forceRefresh?: boolean; date?: string; timezoneOffsetMinutes?: number; transactionSource?: string; userId?: string; includeDuplicates?: boolean } = {}): Promise<Receipt[]> {
+  const { receipts } = await fetchAllReceipts(customerId, options);
+  return receipts;
 }
 
 export async function fetchReceiptsSummaryByDate(

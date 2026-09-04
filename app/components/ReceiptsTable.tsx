@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Receipt, ReceiptPage } from '@/lib/api-types';
-import { fetchReceipts } from '@/lib/webapi-client';
+import { fetchAllReceipts, fetchReceipts } from '@/lib/webapi-client';
 import { normalizeWorkDate } from '@/lib/work-date';
 import { WORK_CUSTOMER_ID_PARAM } from '@/lib/work-org';
 import { cn } from '@/lib/utils';
@@ -114,6 +114,54 @@ const isDuplicateReceipt = (receipt: Receipt) => {
   return Boolean((receipt.parentReceiptId ?? anyReceipt.ParentReceiptId)?.trim());
 };
 
+const getOperationNumber = (receipt: Receipt) => {
+  const anyReceipt = receipt as Receipt & { TransactionOperationNumber?: string | null };
+  return (receipt.transactionOperationNumber ?? anyReceipt.TransactionOperationNumber ?? '').trim();
+};
+
+const normalizeOperationNumber = (value?: string | null) =>
+  (value ?? '').replace(/[\s.\-]/g, '').toLowerCase();
+
+const compareByColumn = (a: Receipt, b: Receipt, column: string): number => {
+  switch (column) {
+    case 'createdAt':
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    case 'transactionSource':
+      return (a.transactionSource || '').localeCompare(b.transactionSource || '', 'es', { sensitivity: 'base' });
+    case 'transactionAmount':
+      return Number(a.transactionAmount || 0) - Number(b.transactionAmount || 0);
+    case 'transactionDateTimeUtc':
+      return new Date(a.transactionDateTimeUtc || 0).getTime() - new Date(b.transactionDateTimeUtc || 0).getTime();
+    case 'transactionOperationNumber':
+      return normalizeOperationNumber(getOperationNumber(a)).localeCompare(
+        normalizeOperationNumber(getOperationNumber(b)),
+        'es',
+        { numeric: true, sensitivity: 'base' },
+      );
+    case 'payeeName':
+      return (a.payeeName || '').localeCompare(b.payeeName || '', 'es', { sensitivity: 'base' });
+    case 'userName':
+      return (a.userName || '').localeCompare(b.userName || '', 'es', { sensitivity: 'base' });
+    default:
+      return 0;
+  }
+};
+
+const compareReceipts = (a: Receipt, b: Receipt, column: string, direction: 'asc' | 'desc'): number => {
+  const primary = compareByColumn(a, b, column);
+  if (primary !== 0) {
+    return direction === 'asc' ? primary : -primary;
+  }
+
+  const dupA = isDuplicateReceipt(a) ? 1 : 0;
+  const dupB = isDuplicateReceipt(b) ? 1 : 0;
+  if (dupA !== dupB) {
+    return dupA - dupB;
+  }
+
+  return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+};
+
 const formatDateLima = (iso?: string | null) => {
   if (!iso) return '';
   return new Date(iso).toLocaleString('es-PE', { timeZone: LIMA_TIMEZONE });
@@ -145,7 +193,7 @@ function receiptToExportRow(receipt: Receipt, includeUserColumn: boolean): (stri
     receipt.transactionSource?.trim() || (isReceiptParsed(receipt) ? 'Sin clasificar' : 'Procesando…'),
     typeof receipt.transactionAmount === 'number' ? receipt.transactionAmount : formatImporteCell(receipt),
     formatDateLima(receipt.transactionDateTimeUtc),
-    receipt.transactionOperationNumber ?? '',
+    getOperationNumber(receipt),
     receipt.payeeName ?? '',
   ];
   if (includeUserColumn) {
@@ -312,7 +360,6 @@ export default function ReceiptsTable({
   const initialCacheKey = canHydrateInitialCache
     ? buildCacheKey(
         selectedOrg,
-        1,
         normalizedInitialDate,
         normalizedInitialTimezoneOffsetMinutes,
         initialTransactionSource ?? null,
@@ -344,14 +391,13 @@ export default function ReceiptsTable({
 
   function buildCacheKey(
     customerId: string,
-    page: number,
     date: string,
     timezoneOffsetMinutes: number,
     transactionSource: string | null,
     userId: string | null,
     includeDuplicates: boolean
   ): string {
-    return `${customerId}:${date}:${timezoneOffsetMinutes}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${includeDuplicates ? 'dups' : 'orig'}:${page}`;
+    return `${customerId}:${date}:${timezoneOffsetMinutes}:${transactionSource ?? 'all'}:${userId ?? 'all'}:${includeDuplicates ? 'dups' : 'orig'}`;
   }
 
   function getTimezoneOffsetMinutes(date: string): number {
@@ -388,11 +434,10 @@ export default function ReceiptsTable({
 
   async function loadReceiptsPage(
     customerId: string,
-    page: number,
     options: LoadReceiptsOptions = {}
   ) {
     if (!customerId) {
-      setReceiptPage(buildEmptyPage(customerId, page));
+      setReceiptPage(buildEmptyPage(customerId, 1));
       setError(null);
       return;
     }
@@ -400,7 +445,6 @@ export default function ReceiptsTable({
     const selectedTimezoneOffsetMinutes = getTimezoneOffsetMinutes(selectedDate);
     const cacheKey = buildCacheKey(
       customerId,
-      page,
       selectedDate,
       selectedTimezoneOffsetMinutes,
       selectedTransactionSource,
@@ -421,49 +465,23 @@ export default function ReceiptsTable({
     setError(null);
 
     try {
-      const query = new URLSearchParams({
-        customerId,
-        page: String(page),
-        pageSize: String(DEFAULT_PAGE_SIZE),
+      const { receipts, lastUpdatedAt, totalCount } = await fetchAllReceipts(customerId, {
+        forceRefresh: options.forceRefresh,
         date: selectedDate,
-        timezoneOffsetMinutes: String(selectedTimezoneOffsetMinutes),
+        timezoneOffsetMinutes: selectedTimezoneOffsetMinutes,
+        transactionSource: selectedTransactionSource ?? undefined,
+        userId: ownReceiptsOnly && lockedUserId ? lockedUserId : (selectedUserId ?? undefined),
+        includeDuplicates: showDuplicates,
       });
-
-      if (selectedTransactionSource) {
-        query.set('transactionSource', selectedTransactionSource);
-      }
-
-      if (ownReceiptsOnly && lockedUserId) {
-        query.set('userId', lockedUserId);
-      } else if (selectedUserId) {
-        query.set('userId', selectedUserId);
-      }
-
-      if (showDuplicates) {
-        query.set('includeDuplicates', 'true');
-      }
-
-      if (options.forceRefresh) {
-        query.set('refresh', '1');
-      }
-
-      const response = await fetch(`/api/receipts?${query.toString()}`, {
-        cache: 'no-store',
-      });
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? 'No se pudo cargar vouchers.');
-      }
 
       const nextPage = {
-        customerId: String(data?.customerId ?? customerId),
-        page: Number(data?.page ?? page),
-        pageSize: Number(data?.pageSize ?? DEFAULT_PAGE_SIZE),
-        hasMore: Boolean(data?.hasMore),
-        lastUpdatedAt: data?.lastUpdatedAt ?? null,
-        receipts: Array.isArray(data?.receipts) ? data.receipts : [],
-        totalCount: Number(data?.totalCount ?? data?.TotalCount ?? 0),
+        customerId,
+        page: 1,
+        pageSize: DEFAULT_PAGE_SIZE,
+        hasMore: false,
+        lastUpdatedAt: lastUpdatedAt ?? lastKnownUpdateRef.current[customerId] ?? null,
+        receipts,
+        totalCount: totalCount || receipts.length,
       } satisfies ReceiptPage;
 
       pageCacheRef.current[cacheKey] = nextPage;
@@ -518,9 +536,9 @@ export default function ReceiptsTable({
 
   useEffect(() => {
     if (selectedOrg) {
-      void loadReceiptsPage(selectedOrg, currentPage);
+      void loadReceiptsPage(selectedOrg);
     }
-  }, [selectedOrg, currentPage, selectedDate, selectedTransactionSource, selectedUserId, showDuplicates]);
+  }, [selectedOrg, selectedDate, selectedTransactionSource, selectedUserId, showDuplicates]);
 
   useEffect(() => {
     if (!selectedOrg) return;
@@ -544,7 +562,7 @@ export default function ReceiptsTable({
         if (lastUpdatedAt && lastUpdatedAt !== previousLastUpdatedAt) {
           setRefreshNotice('Nuevos vouchers disponibles. Actualizando...');
           lastKnownUpdateRef.current[selectedOrg] = lastUpdatedAt;
-          void loadReceiptsPage(selectedOrg, 1, { forceRefresh: true });
+          void loadReceiptsPage(selectedOrg, { forceRefresh: true });
         }
       } catch {
         // Ignore background polling errors.
@@ -561,7 +579,7 @@ export default function ReceiptsTable({
 
     clearOrgCache(selectedOrg);
     setRefreshNotice(null);
-    void loadReceiptsPage(selectedOrg, currentPage, { forceRefresh: true });
+    void loadReceiptsPage(selectedOrg, { forceRefresh: true });
   }
 
   function clearTransactionSourceFilter() {
@@ -586,6 +604,7 @@ export default function ReceiptsTable({
       setSortBy(column);
       setSortDirection('asc');
     }
+    setCurrentPage(1);
   }
 
   let filteredReceipts = receiptPage.receipts;
@@ -609,40 +628,15 @@ export default function ReceiptsTable({
     });
   }
 
-  const sorters: Record<string, (a: Receipt, b: Receipt) => number> = {
-    createdAt: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    transactionSource: (a, b) =>
-      (a.transactionSource || '').localeCompare(b.transactionSource || ''),
-    transactionAmount: (a, b) =>
-      Number(a.transactionAmount || 0) - Number(b.transactionAmount || 0),
-    transactionDateTimeUtc: (a, b) =>
-      new Date(a.transactionDateTimeUtc || 0).getTime() -
-      new Date(b.transactionDateTimeUtc || 0).getTime(),
-    transactionOperationNumber: (a, b) =>
-      (a.transactionOperationNumber || '').localeCompare(b.transactionOperationNumber || ''),
-    payeeName: (a, b) => (a.payeeName || '').localeCompare(b.payeeName || ''),
-    userName: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
-  };
-  const sortedReceipts = [...filteredReceipts];
-  if (sortBy && sorters[sortBy]) {
-    sortedReceipts.sort(sorters[sortBy]);
-    if (sortDirection === 'desc') sortedReceipts.reverse();
-  }
-
-  const pageSize = receiptPage.pageSize || DEFAULT_PAGE_SIZE;
-  const loadedOnPage = receiptPage.receipts.length;
-  const apiTotal = Number(receiptPage.totalCount ?? 0);
-  const pageHadHiddenDuplicates = !showDuplicates && receiptPage.receipts.some(isDuplicateReceipt);
-  const inferredHasMore =
-    Boolean(receiptPage.hasMore) ||
-    (loadedOnPage >= pageSize && apiTotal > currentPage * pageSize) ||
-    (pageHadHiddenDuplicates && loadedOnPage >= pageSize);
-  const totalCount = Math.max(apiTotal, (currentPage - 1) * pageSize + loadedOnPage);
-  const totalPages = Math.max(
-    1,
-    Math.ceil((totalCount || loadedOnPage) / pageSize) || 1,
-    inferredHasMore ? currentPage + 1 : currentPage,
+  const sortedReceipts = [...filteredReceipts].sort((a, b) =>
+    compareReceipts(a, b, sortBy, sortDirection),
   );
+
+  const pageSize = DEFAULT_PAGE_SIZE;
+  const totalCount = sortedReceipts.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize) || 1);
+  const displayPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const pagedReceipts = sortedReceipts.slice((displayPage - 1) * pageSize, displayPage * pageSize);
   const showPaginationControls = totalPages > 1;
   const columnCount = 7 + (ownReceiptsOnly ? 0 : 1) + (isSuperAdmin ? 1 : 0);
 
@@ -685,25 +679,7 @@ export default function ReceiptsTable({
       );
     }
 
-    const exportSorters: Record<string, (a: Receipt, b: Receipt) => number> = {
-      createdAt: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      transactionSource: (a, b) =>
-        (a.transactionSource || '').localeCompare(b.transactionSource || ''),
-      transactionAmount: (a, b) =>
-        Number(a.transactionAmount || 0) - Number(b.transactionAmount || 0),
-      transactionDateTimeUtc: (a, b) =>
-        new Date(a.transactionDateTimeUtc || 0).getTime() -
-        new Date(b.transactionDateTimeUtc || 0).getTime(),
-      transactionOperationNumber: (a, b) =>
-        (a.transactionOperationNumber || '').localeCompare(b.transactionOperationNumber || ''),
-      payeeName: (a, b) => (a.payeeName || '').localeCompare(b.payeeName || ''),
-      userName: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
-    };
-    const sorted = [...filtered];
-    if (sortBy && exportSorters[sortBy]) {
-      sorted.sort(exportSorters[sortBy]);
-      if (sortDirection === 'desc') sorted.reverse();
-    }
+    const sorted = [...filtered].sort((a, b) => compareReceipts(a, b, sortBy, sortDirection));
 
     const includeUserColumn = !ownReceiptsOnly;
     const headers = buildExportHeaders(includeUserColumn);
@@ -772,10 +748,10 @@ export default function ReceiptsTable({
   }
 
   const paginationLabel = (() => {
-    const loadedVisible = sortedReceipts.length;
-    const start = loadedVisible === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const loadedVisible = pagedReceipts.length;
+    const start = loadedVisible === 0 ? 0 : (displayPage - 1) * pageSize + 1;
     const end = loadedVisible === 0 ? 0 : start + loadedVisible - 1;
-    if (totalCount === 0 && loadedVisible === 0) return 'Sin vouchers';
+    if (totalCount === 0) return 'Sin vouchers';
     return `${start}–${end} de ${totalCount} vouchers`;
   })();
 
@@ -952,7 +928,7 @@ export default function ReceiptsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && sortedReceipts.length === 0 && (
+            {loading && pagedReceipts.length === 0 && (
               <TableRow>
                 <TableCell colSpan={columnCount} className="py-10 text-center">
                   <div className="flex items-center justify-center gap-2">
@@ -963,7 +939,7 @@ export default function ReceiptsTable({
               </TableRow>
             )}
 
-            {!loading && sortedReceipts.length === 0 && !error && (
+            {!loading && pagedReceipts.length === 0 && !error && (
               <TableRow>
                 <TableCell
                   colSpan={columnCount}
@@ -974,7 +950,7 @@ export default function ReceiptsTable({
               </TableRow>
             )}
 
-            {sortedReceipts.map((receipt) => {
+            {pagedReceipts.map((receipt) => {
               const isHighlighted = highlightedRow === receipt.receiptId;
               const duplicate = isDuplicateReceipt(receipt);
               return (
@@ -1034,7 +1010,7 @@ export default function ReceiptsTable({
                       : ''}
                   </TableCell>
                   <TableCell className="normal-case">
-                    {receipt.transactionOperationNumber ?? ''}
+                    {getOperationNumber(receipt)}
                   </TableCell>
                   <TableCell className="normal-case">{receipt.payeeName ?? ''}</TableCell>
                   {!ownReceiptsOnly && (
@@ -1075,13 +1051,13 @@ export default function ReceiptsTable({
               variant="outline"
               size="icon"
               className="h-9 w-9"
-              disabled={currentPage <= 1 || loading}
+              disabled={displayPage <= 1 || loading}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               aria-label="Página anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            {getVisiblePages(currentPage, totalPages).map((page, index, arr) => {
+            {getVisiblePages(displayPage, totalPages).map((page, index, arr) => {
               const prev = arr[index - 1];
               const showEllipsis = prev !== undefined && page - prev > 1;
               return (
@@ -1091,7 +1067,7 @@ export default function ReceiptsTable({
                   )}
                   <Button
                     type="button"
-                    variant={page === currentPage ? 'shadow' : 'outline'}
+                    variant={page === displayPage ? 'shadow' : 'outline'}
                     size="sm"
                     className="h-9 min-w-9"
                     disabled={loading}
@@ -1107,7 +1083,7 @@ export default function ReceiptsTable({
               variant="outline"
               size="icon"
               className="h-9 w-9"
-              disabled={currentPage >= totalPages || loading}
+              disabled={displayPage >= totalPages || loading}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               aria-label="Página siguiente"
             >
